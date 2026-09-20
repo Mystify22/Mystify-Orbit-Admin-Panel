@@ -8,39 +8,25 @@ interface StoredOtpSession {
   expiresAt: number;
 }
 
-/**
- * Determine the URL for the Send OTP request.
- */
-const getSendOtpUrl = (): string => {
-  const endpoint = (import.meta.env.VITE_SEND_OTP_ENDPOINT || '/v1/auth/send-otp').trim();
+// ---------------------------------------------------------------------------
+// API config — base URL from env, endpoints defined here as part of the
+// API contract (they don't change between dev/staging/prod)
+// ---------------------------------------------------------------------------
+const AUTH_BASE_URL = (import.meta.env.VITE_AUTH_MS_URL as string | undefined)?.trim() ?? '';
 
-  if (import.meta.env.DEV) {
-    return endpoint;
-  }
-
-  const baseUrl = (import.meta.env.AUTH_MS_URL || import.meta.env.VITE_AUTH_MS_URL || '').trim();
-  if (baseUrl) {
-    return `${baseUrl.replace(/\/+$/, '')}${endpoint}`;
-  }
-
-  return endpoint;
-};
+const AUTH_ENDPOINTS = {
+  sendOtp: '/v1/auth/send-otp',
+  verifyOtp: '/v1/auth/verify-otp',
+} as const;
 
 /**
- * Determine the URL for the Verify OTP request.
+ * Build an absolute URL from the auth base URL + an endpoint path.
+ * In development without a base URL the path is used as-is (Vite proxy handles it).
  */
-const getVerifyOtpUrl = (): string => {
-  const endpoint = (import.meta.env.VITE_VERIFY_OTP_ENDPOINT || '/v1/auth/verify-otp').trim();
-
-  if (import.meta.env.DEV) {
-    return endpoint;
+const buildUrl = (endpoint: string): string => {
+  if (AUTH_BASE_URL) {
+    return `${AUTH_BASE_URL.replace(/\/+$/, '')}${endpoint}`;
   }
-
-  const baseUrl = (import.meta.env.AUTH_MS_URL || import.meta.env.VITE_AUTH_MS_URL || '').trim();
-  if (baseUrl) {
-    return `${baseUrl.replace(/\/+$/, '')}${endpoint}`;
-  }
-
   return endpoint;
 };
 
@@ -59,7 +45,7 @@ export const authService = {
     }
 
     const formattedPhoneNumber = `+91${cleanDigits.slice(-10)}`;
-    const targetUrl = getSendOtpUrl();
+    const targetUrl = buildUrl(AUTH_ENDPOINTS.sendOtp);
 
     try {
       const response = await axios.post(
@@ -130,7 +116,7 @@ export const authService = {
     }
 
     const formattedPhoneNumber = `+91${cleanDigits.slice(-10)}`;
-    const targetUrl = getVerifyOtpUrl();
+    const targetUrl = buildUrl(AUTH_ENDPOINTS.verifyOtp);
 
     try {
       const response = await axios.post(

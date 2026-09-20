@@ -3,17 +3,33 @@ import type { MediaType, UploadResponse } from '../types/media';
 
 export type ProgressCallback = (percentage: number) => void;
 
-// Direct environment configuration (or edit endpoints directly here)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
-const FILE_FIELD_NAME = import.meta.env.VITE_FILE_FIELD_NAME || 'file';
-const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN || '';
+// ---------------------------------------------------------------------------
+// API config — base URL from env, endpoints defined here as part of the
+// API contract (they don't change between dev/staging/prod)
+// ---------------------------------------------------------------------------
+const USER_BASE_URL = (import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '';
 
-const ENDPOINTS: Record<MediaType, string> = {
-  avatar: import.meta.env.VITE_AVATAR_ENDPOINT || '/media/upload/avatar',
-  cover: import.meta.env.VITE_COVER_ENDPOINT || '/media/upload/cover',
-  theme: import.meta.env.VITE_THEME_ENDPOINT || '/media/upload/theme',
-  audio: import.meta.env.VITE_AUDIO_ENDPOINT || '/media/upload/audio',
+const USER_ENDPOINTS: Record<MediaType, string> = {
+  avatar: '/v1/admin/save-avatar',
+  cover:  '/media/upload/cover',
+  theme:  '/media/upload/theme',
+  audio:  '/media/upload/audio',
+} as const;
+
+// 'file' is the multipart field name expected by the API — not environment-specific
+const FILE_FIELD_NAME = 'file';
+
+/**
+ * Build an absolute URL from the user-ms base URL + an endpoint path.
+ * Falls back to the path alone when no base URL is set (Vite proxy handles it).
+ */
+const buildUserUrl = (endpoint: string): string => {
+  if (USER_BASE_URL) {
+    return `${USER_BASE_URL.replace(/\/+$/, '')}${endpoint}`;
+  }
+  return endpoint;
 };
+
 
 /**
  * Extract audio duration (in seconds) from an Audio File locally
@@ -58,8 +74,8 @@ export const uploadMediaFile = async (
   onProgress: ProgressCallback,
   categoryName?: string
 ): Promise<UploadResponse> => {
-  const endpoint = ENDPOINTS[category];
-  const client = createApiClient(API_BASE_URL, AUTH_TOKEN);
+  const endpoint = buildUserUrl(USER_ENDPOINTS[category]);
+  const client = createApiClient('');
 
   try {
     // Specialized handler for Avatar API: POST /v1/admin/save-avatar?category=xxx (MultipartFile 'file')
