@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/v1/auth': {
+        target: 'https://auth-ms-r7eg.onrender.com',
+        changeOrigin: true,
+        secure: false,
+      },
       '/v1': {
         target: 'https://user-ms-rko7.onrender.com',
         changeOrigin: true,
@@ -24,4 +29,3 @@ export default defineConfig({
     },
   },
 })
-
