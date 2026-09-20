@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { DropZone } from '../common/DropZone';
 import { ProgressBar } from '../common/ProgressBar';
+import { ConfirmationModal } from '../common/ConfirmationModal';
 import type { CategorySpec, UploadStatus } from '../../types/media';
 import { useUploads } from '../../context/UploadContext';
 import { uploadMediaFile } from '../../services/mediaUploadService';
-import { User, CheckCircle, RefreshCw, Eye, Sparkles, Image as ImageIcon, X } from 'lucide-react';
+import {
+  User,
+  CheckCircle,
+  RefreshCw,
+  Eye,
+  Image as ImageIcon,
+  X,
+  Tag,
+  AlertCircle,
+} from 'lucide-react';
 
 const AVATAR_SPEC: CategorySpec = {
   title: 'Avatar Image Uploader',
@@ -18,11 +28,13 @@ const AVATAR_SPEC: CategorySpec = {
 export const AvatarUploader: React.FC = () => {
   const { addToast } = useUploads();
 
+  const [category, setCategory] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -45,21 +57,38 @@ export const AvatarUploader: React.FC = () => {
     setStatusMessage('Ready to upload');
   };
 
-  const handleUpload = async () => {
+  const handleUploadClick = () => {
     if (!selectedFile) return;
+    const trimmedCategory = category.trim();
+    if (!trimmedCategory) {
+      addToast('error', 'Category Required', 'Please enter a category before uploading.');
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
+  const handleConfirmUpload = async () => {
+    if (!selectedFile) return;
+    const trimmedCategory = category.trim();
+    if (!trimmedCategory) return;
+
+    setShowConfirmModal(false);
     setStatus('uploading');
     setProgress(0);
-    setStatusMessage('Uploading avatar...');
+    setStatusMessage(`Uploading avatar to category "${trimmedCategory}"...`);
 
     try {
       await uploadMediaFile(selectedFile, 'avatar', (p) => {
         setProgress(p);
-      });
+      }, trimmedCategory);
 
       setStatus('success');
       setStatusMessage('Avatar uploaded successfully!');
-      addToast('success', 'Avatar Uploaded', `${selectedFile.name} was successfully uploaded.`);
+      addToast(
+        'success',
+        'Avatar Uploaded',
+        `${selectedFile.name} was successfully uploaded to category "${trimmedCategory}".`
+      );
     } catch (err: unknown) {
       const error = err as Error;
       setStatus('error');
@@ -74,13 +103,20 @@ export const AvatarUploader: React.FC = () => {
     setStatus('idle');
     setProgress(0);
     setStatusMessage('');
+    setShowConfirmModal(false);
   };
+
+  const isUploadDisabled =
+    !selectedFile ||
+    !category.trim() ||
+    status === 'uploading' ||
+    status === 'success';
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
       {/* Upload Box */}
       <div className="red-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div
             style={{
               width: '44px',
@@ -105,6 +141,108 @@ export const AvatarUploader: React.FC = () => {
           </div>
         </div>
 
+        {/* Category Input Heading & Field */}
+        <div className="form-group" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label className="form-label" htmlFor="avatar-category-input" style={{ margin: 0 }}>
+              <Tag size={16} color="var(--primary-red)" />
+              <span>Category</span>
+              <span style={{ color: 'var(--primary-red)', fontWeight: 800 }}>*</span>
+            </label>
+            {category && (
+              <button
+                type="button"
+                onClick={() => setCategory('')}
+                disabled={status === 'uploading'}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--primary-red)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 6px',
+                  borderRadius: 'var(--radius-sm)',
+                  transition: 'background-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fff1f2')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                <X size={13} /> Clear
+              </button>
+            )}
+          </div>
+
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            {category ? (
+              <button
+                type="button"
+                onClick={() => setCategory('')}
+                title="Remove current input"
+                aria-label="Remove current category input"
+                disabled={status === 'uploading'}
+                style={{
+                  position: 'absolute',
+                  left: '10px',
+                  backgroundColor: '#fff1f2',
+                  border: '1px solid var(--primary-red-border)',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--primary-red)',
+                  padding: 0,
+                  zIndex: 2,
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--primary-red)';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff1f2';
+                  e.currentTarget.style.color = 'var(--primary-red)';
+                }}
+              >
+                <X size={14} />
+              </button>
+            ) : (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)',
+                  pointerEvents: 'none',
+                }}
+              >
+                <Tag size={16} />
+              </div>
+            )}
+            <input
+              id="avatar-category-input"
+              type="text"
+              className="form-input"
+              placeholder="Enter category name (e.g. Gaming, Anime, Cyberpunk...)"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={status === 'uploading'}
+              style={{
+                paddingLeft: '42px',
+                paddingRight: '14px',
+              }}
+            />
+          </div>
+        </div>
+
         <DropZone
           spec={AVATAR_SPEC}
           onFileSelected={handleFileSelect}
@@ -121,34 +259,38 @@ export const AvatarUploader: React.FC = () => {
               border: '1px solid var(--border-card)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)', display: 'block' }}>
-                  {selectedFile.name}
-                </strong>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedFile.type}
+            {/* Warning if category is missing */}
+            {!category.trim() && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: 'var(--primary-red)',
+                  fontSize: '0.8rem',
+                  backgroundColor: 'var(--primary-red-subtle)',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--primary-red-border)',
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>
+                  Please enter a <strong>Category</strong> above to enable the upload button.
                 </span>
               </div>
-              <button
-                className="btn btn-ghost"
-                onClick={handleReset}
-                disabled={status === 'uploading'}
-                style={{ padding: '6px 10px', fontSize: '0.8rem' }}
-              >
-                Change
-              </button>
-            </div>
+            )}
 
             {status !== 'idle' && (
               <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
             )}
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: !category.trim() || status !== 'idle' ? '16px' : '0' }}>
               <button
                 className="btn btn-primary"
-                onClick={handleUpload}
-                disabled={status === 'uploading' || status === 'success'}
+                onClick={handleUploadClick}
+                disabled={isUploadDisabled}
+                title={!category.trim() ? 'Please enter a category to enable upload' : undefined}
                 style={{ flex: 1 }}
               >
                 {status === 'uploading' ? (
@@ -158,9 +300,7 @@ export const AvatarUploader: React.FC = () => {
                     <CheckCircle size={18} /> Uploaded
                   </>
                 ) : (
-                  <>
-                    <Sparkles size={18} /> Upload Avatar
-                  </>
+                  <>Upload Avatar</>
                 )}
               </button>
 
@@ -227,7 +367,7 @@ export const AvatarUploader: React.FC = () => {
               padding: '24px 0',
             }}
           >
-            {/* Circular Preview Only */}
+            {/* Circular Preview */}
             <div
               style={{
                 width: '200px',
@@ -247,6 +387,26 @@ export const AvatarUploader: React.FC = () => {
                 alt="Avatar Preview"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
+            </div>
+
+            {/* Category Preview Tag */}
+            <div
+              style={{
+                marginTop: '20px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: category.trim() ? 'var(--primary-red-subtle)' : '#f3f4f6',
+                color: category.trim() ? 'var(--primary-red)' : 'var(--text-secondary)',
+                border: category.trim() ? '1px solid var(--primary-red-border)' : '1px solid #e5e7eb',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+              }}
+            >
+              <Tag size={14} />
+              <span>Category: <strong>{category.trim() || 'Not specified yet'}</strong></span>
             </div>
           </div>
         ) : (
@@ -290,6 +450,17 @@ export const AvatarUploader: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Irreversible Upload Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        categoryName={category.trim()}
+        message={`This is irreversible process, so are you sure to upload the selected image under '${category.trim()}' category.`}
+        onConfirm={handleConfirmUpload}
+        onCancel={() => setShowConfirmModal(false)}
+        isLoading={status === 'uploading'}
+      />
     </div>
   );
 };
+

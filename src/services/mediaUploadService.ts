@@ -4,7 +4,7 @@ import type { MediaType, UploadResponse } from '../types/media';
 export type ProgressCallback = (percentage: number) => void;
 
 // Direct environment configuration (or edit endpoints directly here)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const FILE_FIELD_NAME = import.meta.env.VITE_FILE_FIELD_NAME || 'file';
 const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN || '';
 
@@ -35,25 +35,83 @@ export const getAudioDuration = (file: File): Promise<number> => {
 };
 
 /**
- * Direct Media Upload Handler (multipart/form-data)
- * Connects directly to your backend APIs via .env or ENDPOINTS config above
+ * Convert File to Base64 String (Data URL)
+ */
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(reader.result as string);
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * Direct Media Upload Handler
+ * Handles JSON payload for Avatar and multipart/form-data for other media types
  */
 export const uploadMediaFile = async (
   file: File,
   category: MediaType,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  categoryName?: string
 ): Promise<UploadResponse> => {
   const endpoint = ENDPOINTS[category];
   const client = createApiClient(API_BASE_URL, AUTH_TOKEN);
 
-  // Prepare standard FormData payload for backend MultipartFile receiver
-  const formData = new FormData();
-  formData.append(FILE_FIELD_NAME, file);
-  formData.append('mediaCategory', category);
-  formData.append('originalFileName', file.name);
-  formData.append('mimeType', file.type);
-
   try {
+    // Specialized handler for Avatar API: POST /v1/admin/save-avatar?category=xxx (MultipartFile 'file')
+    if (category === 'avatar') {
+      const queryParam = categoryName ? `?category=${encodeURIComponent(categoryName.trim())}` : '';
+      const requestUrl = `${endpoint}${queryParam}`;
+
+      const formData = new FormData();
+      formData.append(FILE_FIELD_NAME, file);
+
+      const response = await client.post(
+        requestUrl,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percent = Math.min(
+                100,
+                Math.round((progressEvent.loaded * 100) / progressEvent.total)
+              );
+              onProgress(percent);
+            }
+          },
+        }
+      );
+
+      const responseData = response.data?.data || response.data;
+
+      return {
+        success: true,
+        url: responseData?.avatarUrl || responseData?.url || URL.createObjectURL(file),
+        mediaId: responseData?.id ? String(responseData.id) : `avatar_${Date.now()}`,
+        mimeType: file.type,
+        size: file.size,
+        message: response.data?.message || 'Avatar saved successfully to database!',
+      };
+    }
+
+    // Standard Multipart FormData for other media types (Cover, Theme, Audio)
+    const formData = new FormData();
+    formData.append(FILE_FIELD_NAME, file);
+    formData.append('mediaCategory', category);
+    if (categoryName && categoryName.trim()) {
+      formData.append('category', categoryName.trim());
+      formData.append('categoryName', categoryName.trim());
+    }
+    formData.append('originalFileName', file.name);
+    formData.append('mimeType', file.type);
+
     const response = await client.post(endpoint, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -82,33 +140,6 @@ export const uploadMediaFile = async (
     };
   } catch (error: unknown) {
     const err = error as Error;
-
-    // Graceful fallback for local development if backend server is not running yet
-    if (
-      err.message.includes('Network Error') ||
-      err.message.includes('ECONNREFUSED') ||
-      err.message.includes('404')
-    ) {
-      for (let i = 1; i <= 10; i++) {
-        await new Promise((res) => setTimeout(res, 50));
-        onProgress(Math.min(100, i * 10));
-      }
-      const localUrl = URL.createObjectURL(file);
-      let duration: number | undefined;
-      if (category === 'audio') {
-        duration = await getAudioDuration(file);
-      }
-      return {
-        success: true,
-        url: localUrl,
-        mediaId: `${category}_${Date.now()}`,
-        mimeType: file.type,
-        size: file.size,
-        duration,
-        message: `${category.toUpperCase()} uploaded successfully`,
-      };
-    }
-
     throw new Error(err.message || `Failed to upload ${category} file.`);
   }
 };

@@ -11,7 +11,6 @@ import {
   Volume2,
   CheckCircle,
   RefreshCw,
-  Sparkles,
   Radio,
   X,
 } from 'lucide-react';
@@ -193,31 +192,13 @@ export const AudioUploader: React.FC = () => {
               border: '1px solid var(--border-card)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)', display: 'block' }}>
-                  {selectedFile.name}
-                </strong>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedFile.type || 'Audio Stream'}
-                  {duration > 0 && ` • Duration: ${formatTime(duration)}`}
-                </span>
-              </div>
-              <button
-                className="btn btn-ghost"
-                onClick={handleReset}
-                disabled={status === 'uploading'}
-                style={{ padding: '6px 10px', fontSize: '0.8rem' }}
-              >
-                Change
-              </button>
-            </div>
-
             {status !== 'idle' && (
-              <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
+              <div style={{ marginBottom: '16px' }}>
+                <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
+              </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 className="btn btn-primary"
                 onClick={handleUpload}
@@ -231,9 +212,7 @@ export const AudioUploader: React.FC = () => {
                     <CheckCircle size={18} /> Uploaded
                   </>
                 ) : (
-                  <>
-                    <Sparkles size={18} /> Upload Audio File
-                  </>
+                  <>Upload Audio File</>
                 )}
               </button>
 
