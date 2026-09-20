@@ -149,84 +149,23 @@ export const AvatarUploader: React.FC = () => {
               <span>Category</span>
               <span style={{ color: 'var(--primary-red)', fontWeight: 800 }}>*</span>
             </label>
-            {category && (
-              <button
-                type="button"
-                onClick={() => setCategory('')}
-                disabled={status === 'uploading'}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--primary-red)',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '2px 6px',
-                  borderRadius: 'var(--radius-sm)',
-                  transition: 'background-color 0.15s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fff1f2')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-              >
-                <X size={13} /> Clear
-              </button>
-            )}
+
           </div>
 
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            {category ? (
-              <button
-                type="button"
-                onClick={() => setCategory('')}
-                title="Remove current input"
-                aria-label="Remove current category input"
-                disabled={status === 'uploading'}
-                style={{
-                  position: 'absolute',
-                  left: '10px',
-                  backgroundColor: '#fff1f2',
-                  border: '1px solid var(--primary-red-border)',
-                  borderRadius: '50%',
-                  width: '24px',
-                  height: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: 'var(--primary-red)',
-                  padding: 0,
-                  zIndex: 2,
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--primary-red)';
-                  e.currentTarget.style.color = '#ffffff';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fff1f2';
-                  e.currentTarget.style.color = 'var(--primary-red)';
-                }}
-              >
-                <X size={14} />
-              </button>
-            ) : (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--text-muted)',
-                  pointerEvents: 'none',
-                }}
-              >
-                <Tag size={16} />
-              </div>
-            )}
+            <div
+              style={{
+                position: 'absolute',
+                left: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            >
+              <Tag size={16} />
+            </div>
             <input
               id="avatar-category-input"
               type="text"
@@ -237,9 +176,38 @@ export const AvatarUploader: React.FC = () => {
               disabled={status === 'uploading'}
               style={{
                 paddingLeft: '42px',
-                paddingRight: '14px',
+                paddingRight: category ? '40px' : '14px',
               }}
             />
+            {category && (
+              <button
+                type="button"
+                onClick={() => setCategory('')}
+                title="Clear category"
+                aria-label="Clear category input"
+                disabled={status === 'uploading'}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  padding: 0,
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary-red)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
         </div>
 
