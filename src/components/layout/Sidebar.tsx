@@ -5,7 +5,10 @@ import {
   Layout,
   Palette,
   Music,
+  LogOut,
+  Smartphone,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export type NavTab = 'dashboard' | 'avatar' | 'cover' | 'theme' | 'audio';
 
@@ -15,6 +18,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+  const { logout, user } = useAuth();
   const navItems = [
     { id: 'dashboard' as NavTab, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'avatar' as NavTab, label: 'Avatar', icon: User },
@@ -138,6 +142,100 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
             );
           })}
         </div>
+      </div>
+
+      {/* Admin Profile & Logout at Sidebar Bottom */}
+      <div
+        style={{
+          marginTop: 'auto',
+          paddingTop: '16px',
+          borderTop: '1.5px solid var(--border-card)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '10px 12px',
+            backgroundColor: 'var(--primary-red-subtle)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--primary-red-soft)',
+          }}
+        >
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--primary-red)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Smartphone size={16} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              style={{
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {user?.mobile ? `+91 ${user.mobile.slice(-10)}` : 'Logged In'}
+            </div>
+            <div
+              style={{
+                fontSize: '0.72rem',
+                color: 'var(--primary-red)',
+                fontWeight: 600,
+              }}
+            >
+              Verified Session
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => logout()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            width: '100%',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            border: '1.5px solid #fee2e2',
+            backgroundColor: '#ffffff',
+            color: '#dc2626',
+            cursor: 'pointer',
+            fontSize: '0.825rem',
+            fontWeight: 700,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#fef2f2';
+            e.currentTarget.style.borderColor = '#fca5a5';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#ffffff';
+            e.currentTarget.style.borderColor = '#fee2e2';
+          }}
+        >
+          <LogOut size={16} />
+          <span>Sign Out</span>
+        </button>
       </div>
     </aside>
   );
