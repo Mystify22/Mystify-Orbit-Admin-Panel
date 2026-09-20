@@ -4,7 +4,7 @@ import { ProgressBar } from '../common/ProgressBar';
 import type { CategorySpec, UploadStatus } from '../../types/media';
 import { useUploads } from '../../context/UploadContext';
 import { uploadMediaFile } from '../../services/mediaUploadService';
-import { Layout, CheckCircle, RefreshCw, Eye, Sparkles, Image as ImageIcon, X } from 'lucide-react';
+import { Layout, CheckCircle, RefreshCw, Eye, Image as ImageIcon, X } from 'lucide-react';
 
 const COVER_SPEC: CategorySpec = {
   title: 'Cover Image Uploader',
@@ -121,30 +121,13 @@ export const CoverUploader: React.FC = () => {
               border: '1px solid var(--border-card)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)', display: 'block' }}>
-                  {selectedFile.name}
-                </strong>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedFile.type}
-                </span>
-              </div>
-              <button
-                className="btn btn-ghost"
-                onClick={handleReset}
-                disabled={status === 'uploading'}
-                style={{ padding: '6px 10px', fontSize: '0.8rem' }}
-              >
-                Change
-              </button>
-            </div>
-
             {status !== 'idle' && (
-              <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
+              <div style={{ marginBottom: '16px' }}>
+                <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
+              </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 className="btn btn-primary"
                 onClick={handleUpload}
@@ -158,9 +141,7 @@ export const CoverUploader: React.FC = () => {
                     <CheckCircle size={18} /> Uploaded
                   </>
                 ) : (
-                  <>
-                    <Sparkles size={18} /> Upload Cover
-                  </>
+                  <>Upload Cover</>
                 )}
               </button>
 
