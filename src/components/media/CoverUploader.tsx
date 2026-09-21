@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { DropZone } from '../common/DropZone';
 import { ProgressBar } from '../common/ProgressBar';
+import { ConfirmationModal } from '../common/ConfirmationModal';
 import type { CategorySpec, UploadStatus } from '../../types/media';
 import { useUploads } from '../../context/UploadContext';
 import { uploadMediaFile } from '../../services/mediaUploadService';
-import { Layout, CheckCircle, RefreshCw, Eye, Image as ImageIcon, X } from 'lucide-react';
+import {
+  Layout,
+  CheckCircle,
+  RefreshCw,
+  Eye,
+  Image as ImageIcon,
+  X,
+  Tag,
+  AlertCircle,
+} from 'lucide-react';
 
 const COVER_SPEC: CategorySpec = {
   title: 'Cover Image Uploader',
@@ -18,11 +28,13 @@ const COVER_SPEC: CategorySpec = {
 export const CoverUploader: React.FC = () => {
   const { addToast } = useUploads();
 
+  const [category, setCategory] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -45,21 +57,38 @@ export const CoverUploader: React.FC = () => {
     setStatusMessage('Ready to upload');
   };
 
-  const handleUpload = async () => {
+  const handleUploadClick = () => {
     if (!selectedFile) return;
+    const trimmedCategory = category.trim();
+    if (!trimmedCategory) {
+      addToast('error', 'Category Required', 'Please enter a category before uploading.');
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
+  const handleConfirmUpload = async () => {
+    if (!selectedFile) return;
+    const trimmedCategory = category.trim();
+    if (!trimmedCategory) return;
+
+    setShowConfirmModal(false);
     setStatus('uploading');
     setProgress(0);
-    setStatusMessage('Uploading cover via multipart stream...');
+    setStatusMessage(`Uploading cover to category "${trimmedCategory}"...`);
 
     try {
       await uploadMediaFile(selectedFile, 'cover', (p) => {
         setProgress(p);
-      });
+      }, trimmedCategory);
 
       setStatus('success');
       setStatusMessage('Cover image uploaded successfully!');
-      addToast('success', 'Cover Uploaded', `${selectedFile.name} was successfully uploaded.`);
+      addToast(
+        'success',
+        'Cover Uploaded',
+        `${selectedFile.name} was successfully uploaded to category "${trimmedCategory}".`
+      );
     } catch (err: unknown) {
       const error = err as Error;
       setStatus('error');
@@ -74,13 +103,20 @@ export const CoverUploader: React.FC = () => {
     setStatus('idle');
     setProgress(0);
     setStatusMessage('');
+    setShowConfirmModal(false);
   };
+
+  const isUploadDisabled =
+    !selectedFile ||
+    !category.trim() ||
+    status === 'uploading' ||
+    status === 'success';
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
       {/* Upload Box */}
       <div className="red-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div
             style={{
               width: '44px',
@@ -105,6 +141,75 @@ export const CoverUploader: React.FC = () => {
           </div>
         </div>
 
+        {/* Category Input Heading & Field */}
+        <div className="form-group" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label className="form-label" htmlFor="cover-category-input" style={{ margin: 0 }}>
+              <Tag size={16} color="var(--primary-red)" />
+              <span>Category</span>
+              <span style={{ color: 'var(--primary-red)', fontWeight: 800 }}>*</span>
+            </label>
+          </div>
+
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                position: 'absolute',
+                left: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            >
+              <Tag size={16} />
+            </div>
+            <input
+              id="cover-category-input"
+              type="text"
+              className="form-input"
+              placeholder="Enter category name (e.g. Doggo, Nature, Anime...)"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={status === 'uploading'}
+              style={{
+                paddingLeft: '42px',
+                paddingRight: category ? '40px' : '14px',
+              }}
+            />
+            {category && (
+              <button
+                type="button"
+                onClick={() => setCategory('')}
+                title="Clear category"
+                aria-label="Clear category input"
+                disabled={status === 'uploading'}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  padding: 0,
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary-red)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+
         <DropZone
           spec={COVER_SPEC}
           onFileSelected={handleFileSelect}
@@ -121,17 +226,38 @@ export const CoverUploader: React.FC = () => {
               border: '1px solid var(--border-card)',
             }}
           >
-            {status !== 'idle' && (
-              <div style={{ marginBottom: '16px' }}>
-                <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
+            {/* Warning if category is missing */}
+            {!category.trim() && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: 'var(--primary-red)',
+                  fontSize: '0.8rem',
+                  backgroundColor: 'var(--primary-red-subtle)',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--primary-red-border)',
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>
+                  Please enter a <strong>Category</strong> above to enable the upload button.
+                </span>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px' }}>
+            {status !== 'idle' && (
+              <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: !category.trim() || status !== 'idle' ? '16px' : '0' }}>
               <button
                 className="btn btn-primary"
-                onClick={handleUpload}
-                disabled={status === 'uploading' || status === 'success'}
+                onClick={handleUploadClick}
+                disabled={isUploadDisabled}
+                title={!category.trim() ? 'Please enter a category to enable upload' : undefined}
                 style={{ flex: 1 }}
               >
                 {status === 'uploading' ? (
@@ -227,6 +353,26 @@ export const CoverUploader: React.FC = () => {
                 style={{ width: '100%', height: 'auto', maxHeight: '340px', objectFit: 'cover' }}
               />
             </div>
+
+            {/* Category Preview Tag */}
+            <div
+              style={{
+                marginTop: '20px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: category.trim() ? 'var(--primary-red-subtle)' : '#f3f4f6',
+                color: category.trim() ? 'var(--primary-red)' : 'var(--text-secondary)',
+                border: category.trim() ? '1px solid var(--primary-red-border)' : '1px solid #e5e7eb',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+              }}
+            >
+              <Tag size={14} />
+              <span>Category: <strong>{category.trim() || 'Not specified yet'}</strong></span>
+            </div>
           </div>
         ) : (
           <div
@@ -269,6 +415,16 @@ export const CoverUploader: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Irreversible Upload Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        categoryName={category.trim()}
+        message={`This is irreversible process, so are you sure to upload the selected image under '${category.trim()}' category.`}
+        onConfirm={handleConfirmUpload}
+        onCancel={() => setShowConfirmModal(false)}
+        isLoading={status === 'uploading'}
+      />
     </div>
   );
 };
