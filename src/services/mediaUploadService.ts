@@ -11,7 +11,7 @@ const USER_BASE_URL = (import.meta.env.VITE_USER_MS_URL as string | undefined)?.
 
 const USER_ENDPOINTS: Record<MediaType, string> = {
   avatar: '/v1/admin/save-avatar',
-  cover:  '/media/upload/cover',
+  cover:  '/v1/admin/save-cover',
   theme:  '/media/upload/theme',
   audio:  '/media/upload/audio',
 } as const;
@@ -78,8 +78,10 @@ export const uploadMediaFile = async (
   const client = createApiClient('');
 
   try {
-    // Specialized handler for Avatar API: POST /v1/admin/save-avatar?category=xxx (MultipartFile 'file')
-    if (category === 'avatar') {
+    // Specialized handler for Avatar & Cover APIs:
+    // POST /v1/admin/save-avatar?category=xxx  (multipart 'file')
+    // POST /v1/admin/save-cover?category=xxx   (multipart 'file')
+    if (category === 'avatar' || category === 'cover') {
       const queryParam = categoryName ? `?category=${encodeURIComponent(categoryName.trim())}` : '';
       const requestUrl = `${endpoint}${queryParam}`;
 
@@ -106,14 +108,15 @@ export const uploadMediaFile = async (
       );
 
       const responseData = response.data?.data || response.data;
+      const label = category === 'cover' ? 'Cover' : 'Avatar';
 
       return {
         success: true,
-        url: responseData?.avatarUrl || responseData?.url || URL.createObjectURL(file),
-        mediaId: responseData?.id ? String(responseData.id) : `avatar_${Date.now()}`,
+        url: responseData?.coverUrl || responseData?.avatarUrl || responseData?.url || URL.createObjectURL(file),
+        mediaId: responseData?.id ? String(responseData.id) : `${category}_${Date.now()}`,
         mimeType: file.type,
         size: file.size,
-        message: response.data?.message || 'Avatar saved successfully to database!',
+        message: response.data?.message || `${label} saved successfully to database!`,
       };
     }
 
