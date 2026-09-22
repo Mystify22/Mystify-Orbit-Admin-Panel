@@ -7,25 +7,39 @@ export type ProgressCallback = (percentage: number) => void;
 // API config — base URL from env, endpoints defined here as part of the
 // API contract (they don't change between dev/staging/prod)
 // ---------------------------------------------------------------------------
-const USER_BASE_URL = (import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '';
+const USER_BASE_URL     = (import.meta.env.VITE_USER_MS_URL     as string | undefined)?.trim() ?? '';
+const QUESTION_BASE_URL = (import.meta.env.VITE_QUESTION_MS_URL as string | undefined)?.trim() ?? '';
 
-const USER_ENDPOINTS: Record<MediaType, string> = {
+// Audio lives on the Question MS — separate from the User MS endpoints below
+const AUDIO_ENDPOINT = '/v1/admin/save-audio';
+
+const USER_ENDPOINTS: Record<Exclude<MediaType, 'audio'>, string> = {
   avatar: '/v1/admin/save-avatar',
   cover:  '/v1/admin/save-cover',
   theme:  '/media/upload/theme',
-  audio:  '/media/upload/audio',
 } as const;
 
-// 'file' is the multipart field name expected by the API — not environment-specific
+// 'file' is the multipart field name expected by all APIs
 const FILE_FIELD_NAME = 'file';
 
 /**
- * Build an absolute URL from the user-ms base URL + an endpoint path.
- * Falls back to the path alone when no base URL is set (Vite proxy handles it).
+ * Build an absolute URL for the User MS.
+ * Falls back to a relative path when no base URL is set (Vite proxy handles it).
  */
 const buildUserUrl = (endpoint: string): string => {
   if (USER_BASE_URL) {
     return `${USER_BASE_URL.replace(/\/+$/, '')}${endpoint}`;
+  }
+  return endpoint;
+};
+
+/**
+ * Build an absolute URL for the Question MS (audio endpoint).
+ * Falls back to a relative path when no base URL is set (Vite proxy handles it).
+ */
+const buildQuestionUrl = (endpoint: string): string => {
+  if (QUESTION_BASE_URL) {
+    return `${QUESTION_BASE_URL.replace(/\/+$/, '')}${endpoint}`;
   }
   return endpoint;
 };
@@ -160,5 +174,62 @@ export const uploadMediaFile = async (
   } catch (error: unknown) {
     const err = error as Error;
     throw new Error(err.message || `Failed to upload ${category} file.`);
+  }
+};
+
+/**
+ * Upload an Audio File to POST /v1/admin/save-audio
+ *
+ * Multipart contract (mirrors the curl):
+ *   -F 'file=@track.mp3;type=audio/mpeg'
+ *   -F 'data={"title":"Harry","categoryId":2}'
+ */
+export const uploadAudioFile = async (
+  file: File,
+  title: string,
+  categoryId: number,
+  onProgress: ProgressCallback
+): Promise<UploadResponse> => {
+  const endpoint = buildQuestionUrl(AUDIO_ENDPOINT);
+  const client = createApiClient('');
+
+  const formData = new FormData();
+  formData.append(FILE_FIELD_NAME, file);
+  // Spring Boot @RequestPart requires the JSON part to declare its own
+  // Content-Type: application/json — wrap it in a Blob to achieve this.
+  const dataBlob = new Blob(
+    [JSON.stringify({ title: title.trim(), categoryId })],
+    { type: 'application/json' }
+  );
+  formData.append('data', dataBlob);
+
+  try {
+    const response = await client.post(endpoint, formData, {
+      // Do NOT set Content-Type manually — the browser must set it automatically
+      // with the correct multipart boundary (omitting it causes HTTP 415)
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const percent = Math.min(
+            100,
+            Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          );
+          onProgress(percent);
+        }
+      },
+    });
+
+    const responseData = response.data?.data || response.data;
+
+    return {
+      success: true,
+      url: responseData?.audioUrl || responseData?.url || URL.createObjectURL(file),
+      mediaId: responseData?.id ? String(responseData.id) : `audio_${Date.now()}`,
+      mimeType: file.type,
+      size: file.size,
+      message: response.data?.message || 'Audio saved successfully!',
+    };
+  } catch (error: unknown) {
+    const err = error as Error;
+    throw new Error(err.message || 'Failed to upload audio file.');
   }
 };

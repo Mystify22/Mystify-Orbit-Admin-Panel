@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DropZone } from '../common/DropZone';
 import { ProgressBar } from '../common/ProgressBar';
+import { ConfirmationModal } from '../common/ConfirmationModal';
 import type { CategorySpec, UploadStatus } from '../../types/media';
 import { useUploads } from '../../context/UploadContext';
-import { uploadMediaFile, getAudioDuration } from '../../services/mediaUploadService';
+import { uploadAudioFile, getAudioDuration } from '../../services/mediaUploadService';
 import {
   Music,
   Play,
@@ -13,6 +14,9 @@ import {
   RefreshCw,
   Radio,
   X,
+  Tag,
+  Hash,
+  AlertCircle,
 } from 'lucide-react';
 
 const AUDIO_SPEC: CategorySpec = {
@@ -36,17 +40,26 @@ const AUDIO_SPEC: CategorySpec = {
 export const AudioUploader: React.FC = () => {
   const { addToast } = useUploads();
 
+  // --- Form fields ---
+  const [title, setTitle] = useState<string>('');
+  const [categoryId, setCategoryId] = useState<string>(''); // kept as string for input, parsed on submit
+
+  // --- File & player state ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+
+  // --- Upload state ---
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Build and revoke audio object URL whenever the file changes
   useEffect(() => {
     if (!selectedFile) {
       setAudioUrl(null);
@@ -68,6 +81,9 @@ export const AudioUploader: React.FC = () => {
     };
   }, [selectedFile]);
 
+  // ---------------------------------------------------------------------------
+  // File selection
+  // ---------------------------------------------------------------------------
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
     setStatus('idle');
@@ -75,6 +91,9 @@ export const AudioUploader: React.FC = () => {
     setStatusMessage('Ready to upload');
   };
 
+  // ---------------------------------------------------------------------------
+  // Audio player controls
+  // ---------------------------------------------------------------------------
   const togglePlay = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -112,21 +131,47 @@ export const AudioUploader: React.FC = () => {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) return;
+  // ---------------------------------------------------------------------------
+  // Upload flow  (Avatar/Cover pattern)
+  // ---------------------------------------------------------------------------
+  const parsedCategoryId = parseInt(categoryId.trim(), 10);
+  const isFormValid = title.trim().length > 0 && !isNaN(parsedCategoryId) && parsedCategoryId > 0;
 
+  const isUploadDisabled =
+    !selectedFile ||
+    !isFormValid ||
+    status === 'uploading' ||
+    status === 'success';
+
+  const handleUploadClick = () => {
+    if (!selectedFile) return;
+    if (!isFormValid) {
+      addToast('error', 'Fields Required', 'Please enter a valid Title and Category ID before uploading.');
+      return;
+    }
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!selectedFile || !isFormValid) return;
+
+    setShowConfirmModal(false);
     setStatus('uploading');
     setProgress(0);
-    setStatusMessage('Streaming audio binary multipart/form-data...');
+    setStatusMessage(`Uploading "${title.trim()}" to category ${parsedCategoryId}...`);
 
     try {
-      await uploadMediaFile(selectedFile, 'audio', (p) => {
+      await uploadAudioFile(selectedFile, title.trim(), parsedCategoryId, (p) => {
         setProgress(p);
       });
 
       setStatus('success');
       setStatusMessage('Audio track uploaded successfully!');
-      addToast('success', 'Audio Uploaded', `${selectedFile.name} was successfully uploaded.`);
+      addToast(
+        'success',
+        'Audio Uploaded',
+        `"${title.trim()}" was successfully saved to category ${parsedCategoryId}.`
+      );
     } catch (err: unknown) {
       const error = err as Error;
       setStatus('error');
@@ -145,13 +190,18 @@ export const AudioUploader: React.FC = () => {
     setProgress(0);
     setStatusMessage('');
     setIsPlaying(false);
+    setShowConfirmModal(false);
   };
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
-      {/* Upload Box */}
+      {/* ── Upload Box ─────────────────────────────────────────────────────── */}
       <div className="red-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div
             style={{
               width: '44px',
@@ -176,12 +226,153 @@ export const AudioUploader: React.FC = () => {
           </div>
         </div>
 
+        {/* ── Title Input ── */}
+        <div className="form-group" style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label className="form-label" htmlFor="audio-title-input" style={{ margin: 0 }}>
+              <Tag size={16} color="var(--primary-red)" />
+              <span>Title</span>
+              <span style={{ color: 'var(--primary-red)', fontWeight: 800 }}>*</span>
+            </label>
+          </div>
+
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                position: 'absolute',
+                left: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            >
+              <Tag size={16} />
+            </div>
+            <input
+              id="audio-title-input"
+              type="text"
+              className="form-input"
+              placeholder="Enter audio title (e.g. Harry Potter Theme)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={status === 'uploading'}
+              style={{
+                paddingLeft: '42px',
+                paddingRight: title ? '40px' : '14px',
+              }}
+            />
+            {title && (
+              <button
+                type="button"
+                onClick={() => setTitle('')}
+                title="Clear title"
+                aria-label="Clear title input"
+                disabled={status === 'uploading'}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  padding: 0,
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary-red)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Category ID Input ── */}
+        <div className="form-group" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <label className="form-label" htmlFor="audio-category-id-input" style={{ margin: 0 }}>
+              <Hash size={16} color="var(--primary-red)" />
+              <span>Category ID</span>
+              <span style={{ color: 'var(--primary-red)', fontWeight: 800 }}>*</span>
+            </label>
+          </div>
+
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                position: 'absolute',
+                left: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            >
+              <Hash size={16} />
+            </div>
+            <input
+              id="audio-category-id-input"
+              type="number"
+              min="1"
+              className="form-input"
+              placeholder="Enter category ID (e.g. 2)"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              disabled={status === 'uploading'}
+              style={{
+                paddingLeft: '42px',
+                paddingRight: categoryId ? '40px' : '14px',
+              }}
+            />
+            {categoryId && (
+              <button
+                type="button"
+                onClick={() => setCategoryId('')}
+                title="Clear category ID"
+                aria-label="Clear category ID input"
+                disabled={status === 'uploading'}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  padding: 0,
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary-red)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Drop Zone ── */}
         <DropZone
           spec={AUDIO_SPEC}
           onFileSelected={handleFileSelect}
           disabled={status === 'uploading'}
         />
 
+        {/* ── Action area (shown after file selection) ── */}
         {selectedFile && (
           <div
             style={{
@@ -192,17 +383,40 @@ export const AudioUploader: React.FC = () => {
               border: '1px solid var(--border-card)',
             }}
           >
+            {/* Validation warning */}
+            {!isFormValid && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: 'var(--primary-red)',
+                  fontSize: '0.8rem',
+                  backgroundColor: 'var(--primary-red-subtle)',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--primary-red-border)',
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>
+                  Please enter a <strong>Title</strong> and a valid <strong>Category ID</strong> above to enable the upload button.
+                </span>
+              </div>
+            )}
+
             {status !== 'idle' && (
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginTop: !isFormValid ? '16px' : '0' }}>
                 <ProgressBar progress={progress} status={status} statusMessage={statusMessage} />
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: (!isFormValid || status !== 'idle') ? '16px' : '0' }}>
               <button
                 className="btn btn-primary"
-                onClick={handleUpload}
-                disabled={status === 'uploading' || status === 'success'}
+                onClick={handleUploadClick}
+                disabled={isUploadDisabled}
+                title={!isFormValid ? 'Please enter a title and category ID to enable upload' : undefined}
                 style={{ flex: 1 }}
               >
                 {status === 'uploading' ? (
@@ -226,7 +440,7 @@ export const AudioUploader: React.FC = () => {
         )}
       </div>
 
-      {/* Audio Wave Player Panel */}
+      {/* ── Audio Wave Player Panel ─────────────────────────────────────────── */}
       <div className="red-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -291,7 +505,49 @@ export const AudioUploader: React.FC = () => {
               preload="metadata"
             />
 
-            {/* Simulated Animated Red Waveform */}
+            {/* Track info pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {title.trim() && (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 12px',
+                    borderRadius: 'var(--radius-full)',
+                    backgroundColor: 'var(--primary-red-subtle)',
+                    color: 'var(--primary-red)',
+                    border: '1px solid var(--primary-red-border)',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Tag size={13} />
+                  <span>{title.trim()}</span>
+                </div>
+              )}
+              {categoryId.trim() && !isNaN(parsedCategoryId) && (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 12px',
+                    borderRadius: 'var(--radius-full)',
+                    backgroundColor: 'var(--primary-red-subtle)',
+                    color: 'var(--primary-red)',
+                    border: '1px solid var(--primary-red-border)',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Hash size={13} />
+                  <span>Cat. {parsedCategoryId}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Animated Waveform */}
             <div
               style={{
                 display: 'flex',
@@ -312,7 +568,9 @@ export const AudioUploader: React.FC = () => {
                       key={index}
                       style={{
                         width: '6px',
-                        height: isPlaying ? `${Math.max(15, (height * (Math.sin(Date.now() / 200 + index) + 1.5)) / 2.5)}%` : `${height}%`,
+                        height: isPlaying
+                          ? `${Math.max(15, (height * (Math.sin(Date.now() / 200 + index) + 1.5)) / 2.5)}%`
+                          : `${height}%`,
                         backgroundColor: isActive ? 'var(--primary-red)' : 'var(--primary-red-border)',
                         borderRadius: '4px',
                         transition: 'height 0.15s ease, background-color 0.2s ease',
@@ -424,6 +682,16 @@ export const AudioUploader: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── Confirmation Modal ─────────────────────────────────────────────── */}
+      <ConfirmationModal
+        isOpen={showConfirmModal}
+        categoryName={`"${title.trim()}" (Category ID: ${parsedCategoryId})`}
+        message={`This is irreversible process, so are you sure to upload the selected audio as '${title.trim()}' under category ID ${parsedCategoryId}?`}
+        onConfirm={handleConfirmUpload}
+        onCancel={() => setShowConfirmModal(false)}
+        isLoading={status === 'uploading'}
+      />
     </div>
   );
 };
