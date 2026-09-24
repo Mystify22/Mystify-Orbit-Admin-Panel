@@ -13,6 +13,13 @@ export default defineConfig({
         // Spoof Origin so the backend's whitelist accepts local dev requests
         headers: { Origin: 'https://auth-ms-r7eg.onrender.com' },
       },
+      // Audio endpoint lives on question-ms (must be before the generic /v1 rule)
+      '/v1/admin/save-audio': {
+        target: 'https://question-ms.onrender.com',
+        changeOrigin: true,
+        secure: false,
+        headers: { Origin: 'https://question-ms.onrender.com' },
+      },
       '/v1': {
         target: 'https://user-ms-rko7.onrender.com',
         changeOrigin: true,
