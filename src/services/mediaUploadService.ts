@@ -84,7 +84,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
  */
 export const uploadMediaFile = async (
   file: File,
-  category: MediaType,
+  category: Exclude<MediaType, 'audio'>,
   onProgress: ProgressCallback,
   categoryName?: string
 ): Promise<UploadResponse> => {
@@ -157,10 +157,6 @@ export const uploadMediaFile = async (
       },
     });
 
-    let duration: number | undefined;
-    if (category === 'audio') {
-      duration = await getAudioDuration(file);
-    }
 
     return {
       success: true,
@@ -168,7 +164,6 @@ export const uploadMediaFile = async (
       mediaId: response.data?.id || response.data?.mediaId || `med_${Date.now()}`,
       mimeType: file.type,
       size: file.size,
-      duration,
       message: response.data?.message || `${category.toUpperCase()} uploaded successfully!`,
     };
   } catch (error: unknown) {
