@@ -1,0 +1,124 @@
+/* Theme Prompt Studio Styling */
+
+.theme-studio-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.theme-studio-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .theme-studio-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Prompt Card Header */
+.card-header-styled {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--border-card);
+}
+
+/* Input validation highlight */
+.form-input.input-error {
+  border-color: #ef4444 !important;
+  background-color: #fff5f5 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.field-error-text {
+  font-size: 0.75rem;
+  color: #dc2626;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+/* Response Section Clean & Simple Fields */
+.res-field-box {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  transition: border-color 0.15s ease;
+}
+
+.res-field-box:hover {
+  border-color: #d1d5db;
+}
+
+.res-field-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--primary-red);
+  margin-bottom: 6px;
+}
+
+.res-field-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #111827;
+  word-break: break-word;
+}
+
+/* Clean Prompt Box */
+.prompt-display-box {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-md);
+  padding: 14px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+/* Code Payload Preview */
+.code-preview-block {
+  background-color: #0f172a;
+  color: #38bdf8;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  border: 1px solid #1e293b;
+  max-height: 280px;
+}
+
+/* Clean Copy button micro-style */
+.copy-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.copy-pill-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #d1d5db;
+}
