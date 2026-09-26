@@ -15,8 +15,6 @@ import {
   Layers,
   Clock,
   AlertTriangle,
-  Sparkles,
-  Wand2,
   Palette,
   Image as ImageIcon,
   ExternalLink,
@@ -24,6 +22,7 @@ import {
   CheckCircle2,
   ArrowDown,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 
 export const ThemeUploader: React.FC = () => {
@@ -171,6 +170,11 @@ export const ThemeUploader: React.FC = () => {
     try {
       const response = await generateThemeApi(promptIdNum);
       setGenerateResponse(response);
+
+      // Automatically clear the prompt id input box after response is generated
+      setGeneratePromptId('');
+      setGeneratePromptIdError(null);
+
       addToast(
         'success',
         'Theme Generated Successfully',
@@ -738,8 +742,8 @@ export const ThemeUploader: React.FC = () => {
       {/* ================================================================= */}
       <div className="studio-section-divider">
         <div className="studio-divider-chip">
-          <Wand2 size={15} />
-          <span>Generate Theme Section</span>
+          <Palette size={15} />
+          <span>Generate Theme</span>
         </div>
       </div>
 
@@ -890,42 +894,78 @@ export const ThemeUploader: React.FC = () => {
               )}
             </div>
 
-            {/* View Switcher: Image Preview vs Raw JSON */}
+            {/* View Switcher: Image Preview vs Raw JSON + Clear Response Button */}
             {generateResponse && (
-              <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', padding: '3px', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', padding: '3px', borderRadius: 'var(--radius-sm)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setGenerateViewMode('preview')}
+                    style={{
+                      border: 'none',
+                      background: generateViewMode === 'preview' ? '#ffffff' : 'transparent',
+                      color: generateViewMode === 'preview' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontWeight: 600,
+                      fontSize: '0.76rem',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      boxShadow: generateViewMode === 'preview' ? 'var(--shadow-sm)' : 'none',
+                    }}
+                  >
+                    Image Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGenerateViewMode('json')}
+                    style={{
+                      border: 'none',
+                      background: generateViewMode === 'json' ? '#ffffff' : 'transparent',
+                      color: generateViewMode === 'json' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontWeight: 600,
+                      fontSize: '0.76rem',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      boxShadow: generateViewMode === 'json' ? 'var(--shadow-sm)' : 'none',
+                    }}
+                  >
+                    Raw JSON
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setGenerateViewMode('preview')}
+                  onClick={() => {
+                    setGenerateResponse(null);
+                    addToast('info', 'Response Cleared', 'Theme generation response has been cleared.');
+                  }}
+                  title="Clear Response"
                   style={{
-                    border: 'none',
-                    background: generateViewMode === 'preview' ? '#ffffff' : 'transparent',
-                    color: generateViewMode === 'preview' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    border: '1px solid #fee2e2',
+                    backgroundColor: '#fff1f2',
+                    color: 'var(--primary-red)',
                     fontSize: '0.76rem',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
+                    fontWeight: 600,
+                    padding: '5px 11px',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
-                    boxShadow: generateViewMode === 'preview' ? 'var(--shadow-sm)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fecdd3';
+                    e.currentTarget.style.borderColor = 'var(--primary-red-border)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fff1f2';
+                    e.currentTarget.style.borderColor = '#fee2e2';
                   }}
                 >
-                  Image Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGenerateViewMode('json')}
-                  style={{
-                    border: 'none',
-                    background: generateViewMode === 'json' ? '#ffffff' : 'transparent',
-                    color: generateViewMode === 'json' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontWeight: 600,
-                    fontSize: '0.76rem',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    boxShadow: generateViewMode === 'json' ? 'var(--shadow-sm)' : 'none',
-                  }}
-                >
-                  Raw JSON
+                  <Trash2 size={13} />
+                  <span>Clear</span>
                 </button>
               </div>
             )}
