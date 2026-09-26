@@ -744,146 +744,144 @@ export const ThemeUploader: React.FC = () => {
       </div>
 
       {/* ================================================================= */}
-      {/* GENERATE THEME GRID: Left = Parameter Input, Right = Response     */}
-      {/* Takes integer promptId -> calls /v1/admin/generate-theme/{id}     */}
+      {/* GENERATE THEME SECTION: Input & Button in same row, Response below*/}
       {/* ================================================================= */}
-      <div className="theme-studio-grid">
-        {/* Left Column: Generate Theme Form */}
-        <div className="red-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
-          <div className="card-header-styled">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--primary-red-subtle)',
-                  color: 'var(--primary-red)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Palette size={20} />
-              </div>
-              <div>
-                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Generate Theme
-                </h2>
-              </div>
+      <div className="red-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        {/* Header */}
+        <div className="card-header-styled" style={{ marginBottom: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--primary-red-subtle)',
+                color: 'var(--primary-red)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Palette size={20} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Generate Theme
+              </h2>
             </div>
           </div>
 
-          <form onSubmit={handleGenerateTheme} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                <label className="form-label" htmlFor="generate-prompt-id-input">
-                  Prompt ID (Integer)
-                  <span style={{ color: 'var(--primary-red)', marginLeft: '2px' }}>*</span>
-                </label>
-                {latestResponse && (
-                  <button
-                    type="button"
-                    className="quick-fill-btn"
-                    onClick={() => handlePromptIdChange(String(latestResponse.id))}
-                    title="Autofill from saved prompt above"
-                  >
-                    <ArrowDown size={13} />
-                    <span>Use Prompt #{latestResponse.id}</span>
-                  </button>
-                )}
-              </div>
+          {latestResponse && (
+            <button
+              type="button"
+              className="quick-fill-btn"
+              onClick={() => handlePromptIdChange(String(latestResponse.id))}
+              title="Autofill from saved prompt above"
+            >
+              <ArrowDown size={13} />
+              <span>Use Prompt #{latestResponse.id}</span>
+            </button>
+          )}
+        </div>
 
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  id="generate-prompt-id-input"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={`form-input no-spin-input ${generatePromptIdError ? 'input-error' : ''}`}
-                  placeholder="Enter integer Prompt ID (e.g. 15)"
-                  value={generatePromptId}
-                  onChange={(e) => handlePromptIdChange(e.target.value)}
-                  style={{ paddingRight: generatePromptId ? '36px' : '14px' }}
-                />
-                {generatePromptId && (
-                  <button
-                    type="button"
-                    onClick={() => handlePromptIdChange('')}
-                    title="Clear Prompt ID"
-                    aria-label="Clear Prompt ID"
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '4px',
-                      borderRadius: '50%',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = 'var(--primary-red)';
-                      e.currentTarget.style.backgroundColor = 'var(--primary-red-subtle)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = 'var(--text-muted)';
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+        {/* Form: Input and Button in the Same Row */}
+        <form onSubmit={handleGenerateTheme} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label className="form-label" htmlFor="generate-prompt-id-input">
+            Prompt ID (Integer)
+            <span style={{ color: 'var(--primary-red)', marginLeft: '2px' }}>*</span>
+          </label>
 
-              {generatePromptIdError ? (
-                <div className="field-error-text">
-                  <AlertTriangle size={13} /> {generatePromptIdError}
-                </div>
-              ) : (
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Enter a valid Theme ID. The Generate Theme button enables only when Theme ID is provided.
-                </span>
+          {/* Same Row: Prompt ID Input Box + Generate Theme Button */}
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '240px', display: 'flex', alignItems: 'center' }}>
+              <input
+                id="generate-prompt-id-input"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className={`form-input no-spin-input ${generatePromptIdError ? 'input-error' : ''}`}
+                placeholder="Enter integer Prompt ID (e.g. 15)"
+                value={generatePromptId}
+                onChange={(e) => handlePromptIdChange(e.target.value)}
+                style={{ paddingRight: generatePromptId ? '36px' : '14px', height: '46px', fontSize: '0.95rem' }}
+              />
+              {generatePromptId && (
+                <button
+                  type="button"
+                  onClick={() => handlePromptIdChange('')}
+                  title="Clear Prompt ID"
+                  aria-label="Clear Prompt ID"
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '4px',
+                    borderRadius: '50%',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = 'var(--primary-red)';
+                    e.currentTarget.style.backgroundColor = 'var(--primary-red-subtle)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <X size={15} />
+                </button>
               )}
             </div>
 
-            <div style={{ marginTop: '8px', display: 'flex', gap: '12px' }}>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={!isGenerateButtonEnabled}
-                style={{
-                  flex: 1,
-                  padding: '13px 20px',
-                  fontSize: '0.98rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.01em',
-                }}
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw size={18} className="spin-animation" />
-                    <span>Generating Theme...</span>
-                  </>
-                ) : (
-                  <span>Generate Theme</span>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={!isGenerateButtonEnabled}
+              style={{
+                height: '46px',
+                padding: '0 28px',
+                fontSize: '0.98rem',
+                fontWeight: 700,
+                letterSpacing: '0.01em',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {isGenerating ? (
+                <>
+                  <RefreshCw size={18} className="spin-animation" />
+                  <span>Generating Theme...</span>
+                </>
+              ) : (
+                <span>Generate Theme</span>
+              )}
+            </button>
+          </div>
 
-        {/* Right Column: Generation Result Card */}
-        <div className="red-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
-          <div className="card-header-styled">
+          {generatePromptIdError ? (
+            <div className="field-error-text">
+              <AlertTriangle size={13} /> {generatePromptIdError}
+            </div>
+          ) : (
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Enter a valid Theme ID. The Generate Theme button enables only when Theme ID is provided.
+            </span>
+          )}
+        </form>
+
+        {/* Response Section: Moved Directly Below Generate Theme Button */}
+        <div style={{ borderTop: '1.5px solid var(--border-card)', paddingTop: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="card-header-styled" style={{ marginBottom: 0, paddingBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                 Response
-              </h2>
+              </h3>
               {generateResponse?.success && (
                 <span className="status-badge-success">
                   <CheckCircle2 size={13} />
@@ -951,8 +949,7 @@ export const ThemeUploader: React.FC = () => {
           ) : !generateResponse ? (
             <div
               style={{
-                flex: 1,
-                minHeight: '280px',
+                minHeight: '220px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -981,14 +978,14 @@ export const ThemeUploader: React.FC = () => {
                 <ImageIcon size={24} />
               </div>
               <strong style={{ color: 'var(--text-primary)', fontSize: '1.05rem', marginBottom: '6px' }}>
-                No Theme Artwork Generated Yet
+                No Theme Generated Yet
               </strong>
-              <p style={{ fontSize: '0.85rem', maxWidth: '340px', lineHeight: 1.5 }}>
-                Enter a registered Prompt ID (e.g. 15) on the left and click "Generate Theme" to synthesize and display the rendered theme image.
+              <p style={{ fontSize: '0.85rem', maxWidth: '380px', lineHeight: 1.5 }}>
+                Enter a registered Theme ID (e.g. 15) above and click "Generate Theme" to synthesize and display the rendered theme image.
               </p>
             </div>
           ) : generateViewMode === 'preview' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Meta bar */}
               <div
                 style={{
@@ -1030,6 +1027,7 @@ export const ThemeUploader: React.FC = () => {
                   src={generateResponse.data}
                   alt="Generated Theme Output"
                   className="generated-image-img"
+                  style={{ maxHeight: '520px' }}
                   loading="lazy"
                 />
                 <div className="image-overlay-actions">
@@ -1083,7 +1081,7 @@ export const ThemeUploader: React.FC = () => {
             </div>
           ) : (
             /* Raw JSON View */
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                   Response JSON Payload
