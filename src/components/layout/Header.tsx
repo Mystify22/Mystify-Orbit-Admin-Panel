@@ -25,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab }) => {
     },
     theme: {
       title: 'Theme',
-      subtitle: 'Upload theme and background assets',
+      subtitle: 'Configure, generate, and save theme prompts and styling tags',
     },
     audio: {
       title: 'Audio',

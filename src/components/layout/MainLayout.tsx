@@ -28,7 +28,7 @@ export const MainLayout: React.FC = () => {
     {
       id: 'theme' as NavTab,
       title: 'Theme',
-      description: 'Upload background wallpapers, texture patterns, and vector SVG assets.',
+      description: 'Configure and save AI theme prompts, categories, and styling tags.',
       icon: Palette,
     },
     {
@@ -138,7 +138,7 @@ export const MainLayout: React.FC = () => {
                           fontSize: '0.9rem',
                         }}
                       >
-                        <span>Open {cat.title} Uploader</span>
+                        <span>Open {cat.title} {cat.id === 'theme' ? 'Studio' : 'Uploader'}</span>
                         <ArrowRight size={18} />
                       </div>
                     </div>
