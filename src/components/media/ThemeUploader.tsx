@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useUploads } from '../../context/UploadContext';
-import { saveThemePromptApi } from '../../services/themePromptService';
-import type { ThemePromptFormData, ThemePromptBackendResponse } from '../../types/themePrompt';
+import { saveThemePromptApi, generateThemeApi } from '../../services/themePromptService';
+import type {
+  ThemePromptFormData,
+  ThemePromptBackendResponse,
+  GenerateThemeApiResponse,
+} from '../../types/themePrompt';
 import './ThemePromptManager.css';
 import {
   Save,
@@ -11,6 +15,15 @@ import {
   Layers,
   Clock,
   AlertTriangle,
+  Sparkles,
+  Wand2,
+  Palette,
+  Image as ImageIcon,
+  ExternalLink,
+  Maximize2,
+  CheckCircle2,
+  ArrowDown,
+  RefreshCw,
 } from 'lucide-react';
 
 export const ThemeUploader: React.FC = () => {
@@ -27,10 +40,18 @@ export const ThemeUploader: React.FC = () => {
   const [formErrors, setFormErrors] = useState<{ [K in keyof ThemePromptFormData]?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Response display state
+  // Response display state for Save Theme Prompt
   const [latestResponse, setLatestResponse] = useState<ThemePromptBackendResponse | null>(null);
   const [responseViewMode, setResponseViewMode] = useState<'cards' | 'json'>('cards');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Generate Theme states
+  const [generatePromptId, setGeneratePromptId] = useState<string>('');
+  const [generatePromptIdError, setGeneratePromptIdError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [generateResponse, setGenerateResponse] = useState<GenerateThemeApiResponse | null>(null);
+  const [generateViewMode, setGenerateViewMode] = useState<'preview' | 'json'>('preview');
+  const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
 
   // Handle field change and clear field-specific error
   const handleInputChange = (field: keyof ThemePromptFormData, value: string) => {
@@ -112,6 +133,55 @@ export const ThemeUploader: React.FC = () => {
     setTimeout(() => {
       setCopiedKey((curr) => (curr === key ? null : curr));
     }, 2000);
+  };
+
+  // Validation for integer promptId (only positive integers allowed: e.g. 15)
+  const isIntegerValid = (val: string): boolean => {
+    const trimmed = val.trim();
+    return /^[1-9]\d*$/.test(trimmed);
+  };
+
+  const handlePromptIdChange = (val: string) => {
+    setGeneratePromptId(val);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      setGeneratePromptIdError(null);
+    } else if (!/^[1-9]\d*$/.test(trimmed)) {
+      setGeneratePromptIdError('Prompt ID must be a positive integer (e.g. 15)');
+    } else {
+      setGeneratePromptIdError(null);
+    }
+  };
+
+  // Only enable Generate Theme button when parameter is integer and not currently generating
+  const isGenerateButtonEnabled = isIntegerValid(generatePromptId) && !isGenerating;
+
+  const handleGenerateTheme = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!isIntegerValid(generatePromptId)) {
+      setGeneratePromptIdError('Please enter a valid integer Prompt ID');
+      addToast('error', 'Validation Error', 'Prompt ID must be a positive integer.');
+      return;
+    }
+
+    const promptIdNum = parseInt(generatePromptId.trim(), 10);
+    setIsGenerating(true);
+
+    try {
+      const response = await generateThemeApi(promptIdNum);
+      setGenerateResponse(response);
+      addToast(
+        'success',
+        'Theme Generated Successfully',
+        `Theme artwork generated for Prompt ID #${promptIdNum}.`
+      );
+    } catch (err: unknown) {
+      const error = err as Error;
+      addToast('error', 'Generation Failed', error.message || 'Could not generate theme artwork.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -662,6 +732,410 @@ export const ThemeUploader: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ================================================================= */}
+      {/* SECTION DIVIDER: Generate Theme Artwork                           */}
+      {/* ================================================================= */}
+      <div className="studio-section-divider">
+        <div className="studio-divider-chip">
+          <Wand2 size={15} />
+          <span>Generate Theme Section</span>
+        </div>
+      </div>
+
+      {/* ================================================================= */}
+      {/* GENERATE THEME GRID: Left = Parameter Input, Right = Response     */}
+      {/* Takes integer promptId -> calls /v1/admin/generate-theme/{id}     */}
+      {/* ================================================================= */}
+      <div className="theme-studio-grid">
+        {/* Left Column: Generate Theme Form */}
+        <div className="red-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
+          <div className="card-header-styled">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--primary-red-subtle)',
+                  color: 'var(--primary-red)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Palette size={20} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  Generate Theme
+                </h2>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleGenerateTheme} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                <label className="form-label" htmlFor="generate-prompt-id-input">
+                  Prompt ID (Integer)
+                  <span style={{ color: 'var(--primary-red)', marginLeft: '2px' }}>*</span>
+                </label>
+                {latestResponse && (
+                  <button
+                    type="button"
+                    className="quick-fill-btn"
+                    onClick={() => handlePromptIdChange(String(latestResponse.id))}
+                    title="Autofill from saved prompt above"
+                  >
+                    <ArrowDown size={13} />
+                    <span>Use Prompt #{latestResponse.id}</span>
+                  </button>
+                )}
+              </div>
+
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  id="generate-prompt-id-input"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className={`form-input no-spin-input ${generatePromptIdError ? 'input-error' : ''}`}
+                  placeholder="Enter integer Prompt ID (e.g. 15)"
+                  value={generatePromptId}
+                  onChange={(e) => handlePromptIdChange(e.target.value)}
+                  style={{ paddingRight: generatePromptId ? '36px' : '14px' }}
+                />
+                {generatePromptId && (
+                  <button
+                    type="button"
+                    onClick={() => handlePromptIdChange('')}
+                    title="Clear Prompt ID"
+                    aria-label="Clear Prompt ID"
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '4px',
+                      borderRadius: '50%',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--primary-red)';
+                      e.currentTarget.style.backgroundColor = 'var(--primary-red-subtle)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--text-muted)';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+
+              {generatePromptIdError ? (
+                <div className="field-error-text">
+                  <AlertTriangle size={13} /> {generatePromptIdError}
+                </div>
+              ) : (
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Enter a valid Theme ID. The Generate Theme button enables only when Theme ID is provided.
+                </span>
+              )}
+            </div>
+
+            <div style={{ marginTop: '8px', display: 'flex', gap: '12px' }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!isGenerateButtonEnabled}
+                style={{
+                  flex: 1,
+                  padding: '13px 20px',
+                  fontSize: '0.98rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.01em',
+                }}
+              >
+                {isGenerating ? (
+                  <>
+                    <RefreshCw size={18} className="spin-animation" />
+                    <span>Generating Theme...</span>
+                  </>
+                ) : (
+                  <span>Generate Theme</span>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Right Column: Generation Result Card */}
+        <div className="red-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
+          <div className="card-header-styled">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Response
+              </h2>
+              {generateResponse?.success && (
+                <span className="status-badge-success">
+                  <CheckCircle2 size={13} />
+                  <span>Success: true</span>
+                </span>
+              )}
+            </div>
+
+            {/* View Switcher: Image Preview vs Raw JSON */}
+            {generateResponse && (
+              <div style={{ display: 'flex', gap: '4px', background: '#f3f4f6', padding: '3px', borderRadius: 'var(--radius-sm)' }}>
+                <button
+                  type="button"
+                  onClick={() => setGenerateViewMode('preview')}
+                  style={{
+                    border: 'none',
+                    background: generateViewMode === 'preview' ? '#ffffff' : 'transparent',
+                    color: generateViewMode === 'preview' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: 600,
+                    fontSize: '0.76rem',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    boxShadow: generateViewMode === 'preview' ? 'var(--shadow-sm)' : 'none',
+                  }}
+                >
+                  Image Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenerateViewMode('json')}
+                  style={{
+                    border: 'none',
+                    background: generateViewMode === 'json' ? '#ffffff' : 'transparent',
+                    color: generateViewMode === 'json' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: 600,
+                    fontSize: '0.76rem',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    boxShadow: generateViewMode === 'json' ? 'var(--shadow-sm)' : 'none',
+                  }}
+                >
+                  Raw JSON
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Body: Loading / Empty / Content */}
+          {isGenerating ? (
+            <div className="generation-loading-container">
+              <div className="generation-pulse-ring">
+                <RefreshCw size={28} className="spin-animation" />
+              </div>
+              <div>
+                <strong style={{ fontSize: '1.05rem', color: 'var(--text-primary)', display: 'block', marginBottom: '6px' }}>
+                  Generating Theme Image...
+                </strong>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '360px', margin: '0 auto', lineHeight: 1.5 }}>
+                  Communicating with AI render pipeline. This usually takes 15-30 seconds to generate and upload to Cloudinary.
+                </p>
+              </div>
+            </div>
+          ) : !generateResponse ? (
+            <div
+              style={{
+                flex: 1,
+                minHeight: '280px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px dashed var(--border-card)',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: '#fffdfd',
+                color: 'var(--text-muted)',
+                textAlign: 'center',
+                padding: '32px',
+              }}
+            >
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary-red-subtle)',
+                  color: 'var(--primary-red)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '12px',
+                }}
+              >
+                <ImageIcon size={24} />
+              </div>
+              <strong style={{ color: 'var(--text-primary)', fontSize: '1.05rem', marginBottom: '6px' }}>
+                No Theme Artwork Generated Yet
+              </strong>
+              <p style={{ fontSize: '0.85rem', maxWidth: '340px', lineHeight: 1.5 }}>
+                Enter a registered Prompt ID (e.g. 15) on the left and click "Generate Theme" to synthesize and display the rendered theme image.
+              </p>
+            </div>
+          ) : generateViewMode === 'preview' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+              {/* Meta bar */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#fafafa',
+                  border: '1px solid #f1f2f4',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '8px 12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  <Clock size={14} color="#6b7280" />
+                  <span>
+                    Generated: {generateResponse.timestamp ? new Date(generateResponse.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: '#ecfdf5',
+                      color: '#059669',
+                      border: '1px solid #a7f3d0',
+                    }}
+                  >
+                    {generateResponse.status || 'OK'} ({generateResponse.code || 200})
+                  </span>
+                </div>
+              </div>
+
+              {/* Rendered Image Card */}
+              <div className="generated-image-card">
+                <img
+                  src={generateResponse.data}
+                  alt="Generated Theme Output"
+                  className="generated-image-img"
+                  loading="lazy"
+                />
+                <div className="image-overlay-actions">
+                  <button
+                    type="button"
+                    className="image-overlay-btn"
+                    onClick={() => setIsLightboxOpen(true)}
+                    title="Expand Full View"
+                  >
+                    <Maximize2 size={13} />
+                    <span>Expand</span>
+                  </button>
+                  <a
+                    href={generateResponse.data}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="image-overlay-btn"
+                    title="Open full image in new tab"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Direct Link Box */}
+              <div className="res-field-box">
+                <div className="res-field-label">Rendered Image URL (Cloudinary)</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span
+                    style={{
+                      fontSize: '0.82rem',
+                      color: '#2563eb',
+                      wordBreak: 'break-all',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {generateResponse.data}
+                  </span>
+                  <button
+                    type="button"
+                    className="copy-pill-btn"
+                    onClick={() => handleCopyText(generateResponse.data, 'img_url')}
+                    title="Copy Image URL"
+                  >
+                    {copiedKey === 'img_url' ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                    <span>{copiedKey === 'img_url' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Raw JSON View */
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  Response JSON Payload
+                </span>
+                <button
+                  type="button"
+                  className="copy-pill-btn"
+                  onClick={() => handleCopyText(JSON.stringify(generateResponse, null, 2), 'gen_raw_json')}
+                >
+                  {copiedKey === 'gen_raw_json' ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                  <span>Copy JSON</span>
+                </button>
+              </div>
+              <pre className="code-preview-block">
+                {JSON.stringify(generateResponse, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Lightbox Modal */}
+      {isLightboxOpen && generateResponse?.data && (
+        <div className="image-lightbox-backdrop" onClick={() => setIsLightboxOpen(false)}>
+          <div className="image-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={generateResponse.data}
+              alt="Enlarged Theme Artwork"
+              className="image-lightbox-img"
+            />
+            <div style={{ marginTop: '12px', display: 'flex', gap: '10px' }}>
+              <a
+                href={generateResponse.data}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-white"
+                style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+              >
+                <ExternalLink size={14} /> Open Original
+              </a>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setIsLightboxOpen(false)}
+                style={{ fontSize: '0.82rem', padding: '6px 16px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -49,3 +49,13 @@ export interface ThemePromptBackendResponse {
   status?: string;
   rawPayload?: Record<string, unknown>;
 }
+
+export interface GenerateThemeApiResponse {
+  timestamp?: string;
+  code?: number | string;
+  status?: string;
+  success?: boolean;
+  message?: string | null;
+  data: string; // Generated image URL
+}
+

@@ -3,11 +3,23 @@ import type {
   ThemePromptFormData,
   ThemePromptBackendResponse,
   BackendSaveThemePromptApiResponse,
+  GenerateThemeApiResponse,
 } from '../types/themePrompt';
 
 // Base URL from environment (fallback to empty in dev so Vite proxy forwards to question-ms-imao)
 const QUESTION_BASE_URL = (import.meta.env.VITE_QUESTION_MS_URL as string | undefined)?.trim() ?? '';
 const SAVE_THEME_PROMPT_ENDPOINT = '/v1/admin/save-theme-prompt';
+const GENERATE_THEME_ENDPOINT = '/v1/admin/generate-theme';
+
+/**
+ * Build the absolute or proxied URL for the generate theme endpoint.
+ */
+const getGenerateThemeUrl = (promptId: number | string): string => {
+  if (QUESTION_BASE_URL) {
+    return `${QUESTION_BASE_URL.replace(/\/+$/, '')}${GENERATE_THEME_ENDPOINT}/${encodeURIComponent(promptId)}`;
+  }
+  return `${GENERATE_THEME_ENDPOINT}/${encodeURIComponent(promptId)}`;
+};
 
 /**
  * Build the absolute or proxied URL for the theme prompt endpoint.
@@ -77,3 +89,50 @@ export const saveThemePromptApi = async (
     throw err;
   }
 };
+
+/**
+ * Generate theme image via live backend API:
+ * POST https://question-ms-imao.onrender.com/v1/admin/generate-theme/{promptId}
+ * Request: empty body (-d '')
+ * Headers: accept: *\/*
+ */
+export const generateThemeApi = async (
+  promptId: number | string
+): Promise<GenerateThemeApiResponse> => {
+  const targetUrl = getGenerateThemeUrl(promptId);
+
+  try {
+    const response = await axios.post<GenerateThemeApiResponse>(
+      targetUrl,
+      '',
+      {
+        headers: {
+          accept: '*/*',
+        },
+        timeout: 120000, // 2 minute timeout for AI image synthesis
+      }
+    );
+
+    const resData = response.data;
+    if (!resData) {
+      throw new Error('No response received from theme generation service.');
+    }
+
+    if (resData.success === false) {
+      throw new Error(resData.message || 'Theme generation failed on server.');
+    }
+
+    return resData;
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err)) {
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to generate theme. Please check your connection and prompt ID.';
+      throw new Error(errorMsg);
+    }
+    throw err;
+  }
+};
+
