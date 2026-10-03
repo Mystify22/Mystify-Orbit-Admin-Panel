@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DropZone } from '../common/DropZone';
+import { AvatarGallery } from './AvatarGallery';
 import { ProgressBar } from '../common/ProgressBar';
 import { ConfirmationModal } from '../common/ConfirmationModal';
 import type { CategorySpec, UploadStatus } from '../../types/media';
@@ -113,8 +114,9 @@ export const AvatarUploader: React.FC = () => {
     status === 'success';
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
-      {/* Upload Box */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+        {/* Upload Box */}
       <div className="red-card" style={{ padding: '28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div
@@ -428,6 +430,9 @@ export const AvatarUploader: React.FC = () => {
         onCancel={() => setShowConfirmModal(false)}
         isLoading={status === 'uploading'}
       />
+      </div>
+
+      <AvatarGallery />
     </div>
   );
 };
