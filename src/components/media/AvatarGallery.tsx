@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { RefreshCw, Image as ImageIcon, ChevronRight } from 'lucide-react';
+import { Image as ImageIcon, ChevronRight } from 'lucide-react';
 
 interface AvatarCategory {
   category: string;
