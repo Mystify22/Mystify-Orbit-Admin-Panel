@@ -23,5 +23,3 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local development env overrides (contains empty URLs for Vite proxy — not for production)
-.env.development
