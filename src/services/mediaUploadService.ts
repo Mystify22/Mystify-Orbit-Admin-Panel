@@ -7,8 +7,14 @@ export type ProgressCallback = (percentage: number) => void;
 // API config — base URL from env, endpoints defined here as part of the
 // API contract (they don't change between dev/staging/prod)
 // ---------------------------------------------------------------------------
-const USER_BASE_URL     = (import.meta.env.VITE_USER_MS_URL     as string | undefined)?.trim() ?? '';
-const QUESTION_BASE_URL = (import.meta.env.VITE_QUESTION_MS_URL as string | undefined)?.trim() ?? '';
+// In development, force empty baseURL so Vite proxy handles requests and bypasses Render CORS restrictions.
+// In production builds, use configured environment URLs.
+const USER_BASE_URL = import.meta.env.DEV
+  ? ''
+  : ((import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '');
+const QUESTION_BASE_URL = import.meta.env.DEV
+  ? ''
+  : ((import.meta.env.VITE_QUESTION_MS_URL as string | undefined)?.trim() ?? '');
 
 // Audio lives on the Question MS — separate from the User MS endpoints below
 const AUDIO_ENDPOINT = '/v1/admin/save-audio';

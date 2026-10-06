@@ -6,8 +6,11 @@ import type {
   GenerateThemeApiResponse,
 } from '../types/themePrompt';
 
-// Base URL from environment (fallback to empty in dev so Vite proxy forwards to question-ms-imao)
-const QUESTION_BASE_URL = (import.meta.env.VITE_QUESTION_MS_URL as string | undefined)?.trim() ?? '';
+// In development, force empty baseURL so Vite proxy handles requests and bypasses Render CORS restrictions.
+// In production builds, use configured environment URLs.
+const QUESTION_BASE_URL = import.meta.env.DEV
+  ? ''
+  : ((import.meta.env.VITE_QUESTION_MS_URL as string | undefined)?.trim() ?? '');
 const SAVE_THEME_PROMPT_ENDPOINT = '/v1/admin/save-theme-prompt';
 const GENERATE_THEME_ENDPOINT = '/v1/admin/generate-theme';
 

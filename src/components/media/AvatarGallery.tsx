@@ -24,9 +24,11 @@ export const AvatarGallery: React.FC = () => {
   const fetchAvatars = async () => {
     try {
       setLoading(true);
-      setError(null);
+      const userBaseUrl = import.meta.env.DEV
+        ? ''
+        : ((import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '');
       const response = await axios.get<ApiResponse>(
-        'https://user-ms-k4i3.onrender.com/v1/users/get-avatar?pageNumber=0&pageSize=12'
+        `${userBaseUrl}/v1/users/get-avatar?pageNumber=0&pageSize=12`
       );
       const fetchedCategories = response.data.data.content;
       setCategories(fetchedCategories);
