@@ -12,7 +12,11 @@ interface StoredOtpSession {
 // API config — base URL from env, endpoints defined here as part of the
 // API contract (they don't change between dev/staging/prod)
 // ---------------------------------------------------------------------------
-const AUTH_BASE_URL = (import.meta.env.VITE_AUTH_MS_URL as string | undefined)?.trim() ?? '';
+// In development, force empty baseURL so Vite proxy handles requests and bypasses Render CORS restrictions.
+// In production builds, use VITE_AUTH_MS_URL if provided.
+const AUTH_BASE_URL = import.meta.env.DEV
+  ? ''
+  : ((import.meta.env.VITE_AUTH_MS_URL as string | undefined)?.trim() ?? '');
 
 const AUTH_ENDPOINTS = {
   sendOtp: '/v1/auth/send-otp',

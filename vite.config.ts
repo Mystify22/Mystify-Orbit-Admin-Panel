@@ -2,9 +2,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
 // https://vite.dev/config/
-export default defineConfig(() => {
-  // Read base microservice URLs from .env (single source of truth)
-  const env = loadEnv('', process.cwd(), 'VITE_')
+export default defineConfig(({ mode }) => {
+  // Read base microservice URLs from .env with fallback defaults
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
 
   const authUrl = env.VITE_AUTH_MS_URL || 'https://auth-ms-y7b6.onrender.com'
   const questionUrl = env.VITE_QUESTION_MS_URL || 'https://question-ms-imao.onrender.com'
