@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DropZone } from '../common/DropZone';
+import CoverGallery from './coverGallery';
 import { ProgressBar } from '../common/ProgressBar';
 import { ConfirmationModal } from '../common/ConfirmationModal';
 import type { CategorySpec, UploadStatus } from '../../types/media';
@@ -425,6 +426,17 @@ export const CoverUploader: React.FC = () => {
         onCancel={() => setShowConfirmModal(false)}
         isLoading={status === 'uploading'}
       />
+            <div
+  style={{
+    gridColumn: '1 / -1',
+    width: '100%',
+    minWidth: 0,
+  }}
+>
+  <CoverGallery />
+</div>
+
     </div>
+
   );
 };
