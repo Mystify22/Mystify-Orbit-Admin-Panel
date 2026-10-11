@@ -22,8 +22,11 @@ interface ApiResponse {
   };
 }
 
-const COVER_API_URL =
-  'https://user-ms-k4i3.onrender.com/v1/users/get-cover?pageNumber=0&pageSize=12';
+const USER_BASE_URL = import.meta.env.DEV
+  ? ''
+  : ((import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '');
+
+const COVER_API_URL = `${USER_BASE_URL}/v1/users/get-cover?pageNumber=0&pageSize=12`;
 
 const fetchCovers = async (): Promise<CoverCategory[]> => {
   const response = await axios.get<ApiResponse>(COVER_API_URL);
