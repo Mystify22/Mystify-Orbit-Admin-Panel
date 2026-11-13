@@ -1,1241 +1,901 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Image as ImageIcon,
-  Eye,
-  RefreshCw,
-  Tag,
   ChevronRight,
-  X,
+  ChevronLeft,
+  Loader2,
+  RefreshCw,
   AlertCircle,
+  Layout,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 
-interface CoverCategory {
+interface CategoryItem {
+  id: number;
   category: string;
-  coverUrls: string[];
 }
 
-interface ApiResponse {
+interface CategoriesApiResponse {
+  timestamp: string;
+  code: number;
+  status: string;
+  success: boolean;
+  message: string;
   data: {
-    content: CoverCategory[];
+    items: CategoryItem[];
+    nextCursor: number | null;
+    hasNext: boolean;
   };
 }
+
+interface CoversApiResponse {
+  timestamp: string;
+  code: number;
+  status: string;
+  success: boolean;
+  message: string;
+  data: {
+    items: string[];
+    nextCursor: number | null;
+    hasNext: boolean;
+  };
+}
+
+const CATEGORY_LIMIT = 10;
+const COVER_LIMIT = 12;
 
 const USER_BASE_URL = import.meta.env.DEV
   ? ''
   : ((import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '');
 
-const COVER_API_URL = `${USER_BASE_URL}/v1/users/get-cover?pageNumber=0&pageSize=12`;
+export const CoverGallery: React.FC = () => {
+  // Gallery open/collapsed state
+  const [hasOpened, setHasOpened] = useState<boolean>(false);
 
-const fetchCovers = async (): Promise<CoverCategory[]> => {
-  const response = await axios.get<ApiResponse>(COVER_API_URL);
+  // Selected category ID & cover URL state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedCoverUrl, setSelectedCoverUrl] = useState<string | null>(null);
 
-  return response.data.data.content || [];
-};
+  // Refs
+  const categoryScrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
 
-const CoverGallery: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedCover, setSelectedCover] = useState('');
+  // Track scroll position for < button enable/disable
+  const [canScrollLeft, setCanScrollLeft] = useState<boolean>(false);
 
+  const updateScrollButtons = useCallback(() => {
+    if (categoryScrollRef.current) {
+      setCanScrollLeft(categoryScrollRef.current.scrollLeft > 4);
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // 1. TanStack Query: Categories Cache & Infinite Cursor Pagination
+  // -------------------------------------------------------------------------
   const {
-    data: categories = [],
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isFetching,
-  } = useQuery<CoverCategory[], Error>({
-    queryKey: ['covers'],
-    queryFn: fetchCovers,
-    staleTime: 5 * 60 * 1000,
+    data: categoriesData,
+    fetchNextPage: fetchNextCategories,
+    hasNextPage: hasNextCategories,
+    isFetchingNextPage: isFetchingNextCategories,
+    isLoading: isLoadingCategories,
+    isError: isCategoriesError,
+    error: categoriesErrorObj,
+    refetch: refetchCategories,
+  } = useInfiniteQuery<CategoriesApiResponse, Error>({
+    queryKey: ['cover-categories'],
+    queryFn: async ({ pageParam }) => {
+      const cursorParam = pageParam !== null ? `&cursorId=${pageParam}` : '';
+      const response = await axios.get<CategoriesApiResponse>(
+        `${USER_BASE_URL}/v1/users/cover/categories?limit=${CATEGORY_LIMIT}${cursorParam}`
+      );
+      return response.data;
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => {
+      return lastPage.data.hasNext ? lastPage.data.nextCursor : undefined;
+    },
+    enabled: hasOpened,
+    staleTime: 10 * 60 * 1000, // 10 minutes cache freshness
+    gcTime: 30 * 60 * 1000,    // 30 minutes in-memory retention
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
   });
 
-  // Automatically select first category and first cover
+  // Flatten and deduplicate categories across all loaded pages
+  const categories: CategoryItem[] = useMemo(() => {
+    if (!categoriesData?.pages) return [];
+    const map = new Map<number, CategoryItem>();
+    for (const page of categoriesData.pages) {
+      if (page.data?.items) {
+        for (const item of page.data.items) {
+          if (!map.has(item.id)) {
+            map.set(item.id, item);
+          }
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [categoriesData]);
+
+  // Derived active category: explicit selection or defaults to the first category
+  const selectedCategory: CategoryItem | null = useMemo(() => {
+    if (selectedCategoryId !== null) {
+      const found = categories.find((c) => c.id === selectedCategoryId);
+      if (found) return found;
+    }
+    return categories[0] || null;
+  }, [categories, selectedCategoryId]);
+
+  const activeCategoryId = selectedCategory?.id;
+
+  // -------------------------------------------------------------------------
+  // 2. TanStack Query: Covers Cache by Category with Cursor Pagination
+  // -------------------------------------------------------------------------
+  const {
+    data: coversData,
+    fetchNextPage: fetchNextCovers,
+    hasNextPage: hasNextCovers,
+    isFetchingNextPage: isFetchingNextCovers,
+    isLoading: isLoadingCovers,
+    isFetching: isFetchingCovers,
+    isError: isCoversError,
+    error: coversErrorObj,
+    refetch: refetchCovers,
+  } = useInfiniteQuery<CoversApiResponse, Error>({
+    queryKey: ['covers', activeCategoryId],
+    queryFn: async ({ pageParam }) => {
+      const cursorParam = pageParam !== null ? `&cursorId=${pageParam}` : '';
+      const response = await axios.get<CoversApiResponse>(
+        `${USER_BASE_URL}/v1/users/get-cover?categoryId=${activeCategoryId}&limit=${COVER_LIMIT}${cursorParam}`
+      );
+      return response.data;
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => {
+      return lastPage.data.hasNext ? lastPage.data.nextCursor : undefined;
+    },
+    enabled: hasOpened && activeCategoryId !== undefined,
+    staleTime: 5 * 60 * 1000,  // 5 minutes cache freshness per category
+    gcTime: 30 * 60 * 1000,    // 30 minutes in-memory retention
+    refetchOnWindowFocus: false,
+  });
+
+  // Flatten cover image URLs across all loaded pages for the active category
+  const covers: string[] = useMemo(() => {
+    if (!coversData?.pages) return [];
+    const list: string[] = [];
+    for (const page of coversData.pages) {
+      if (page.data?.items) {
+        list.push(...page.data.items);
+      }
+    }
+    return list;
+  }, [coversData]);
+
+  // Derived active cover: explicit selection or defaults to first in category
+  const selectedCover: string = useMemo(() => {
+    if (selectedCoverUrl && covers.includes(selectedCoverUrl)) {
+      return selectedCoverUrl;
+    }
+    return covers[0] || '';
+  }, [covers, selectedCoverUrl]);
+
+  // -------------------------------------------------------------------------
+  // 3. User Actions & Horizontal Category Scroll Controls
+  // -------------------------------------------------------------------------
+  const handleOpenLibrary = () => {
+    setHasOpened(true);
+  };
+
+  const handleSelectCategory = (cat: CategoryItem) => {
+    if (selectedCategoryId === cat.id) return;
+    setSelectedCategoryId(cat.id);
+    setSelectedCoverUrl(null); // Reset selection to first cover in the new category
+  };
+
+  const handleScrollCategoryLeft = () => {
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollBy({ left: -220, behavior: 'smooth' });
+    }
+  };
+
+  const handleScrollCategoryRight = () => {
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollBy({ left: 220, behavior: 'smooth' });
+      // If approaching the end and more categories exist, fetch next
+      const { scrollLeft, clientWidth, scrollWidth } = categoryScrollRef.current;
+      if (
+        scrollLeft + clientWidth >= scrollWidth - 80 &&
+        hasNextCategories &&
+        !isFetchingNextCategories
+      ) {
+        fetchNextCategories();
+      }
+    }
+  };
+
+  const handleCategoryScroll = () => {
+    updateScrollButtons();
+    if (!categoryScrollRef.current) return;
+    const { scrollLeft, clientWidth, scrollWidth } = categoryScrollRef.current;
+    if (
+      scrollLeft + clientWidth >= scrollWidth - 50 &&
+      hasNextCategories &&
+      !isFetchingNextCategories
+    ) {
+      fetchNextCategories();
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // 4. Infinite Scroll Observer for Covers
+  // -------------------------------------------------------------------------
   useEffect(() => {
-    if (categories.length === 0) {
-      setSelectedCategory('');
-      setSelectedCover('');
-      return;
+    if (!hasOpened || isLoadingCategories || isLoadingCovers) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (
+          entry.isIntersecting &&
+          hasNextCovers &&
+          !isFetchingNextCovers
+        ) {
+          fetchNextCovers();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px',
+        threshold: 0.1,
+      }
+    );
+
+    if (bottomSentinelRef.current) {
+      observer.observe(bottomSentinelRef.current);
     }
 
-    const currentCategoryExists = categories.some(
-      (item) => item.category === selectedCategory
-    );
+    return () => {
+      observer.disconnect();
+    };
+  }, [
+    hasOpened,
+    isLoadingCategories,
+    isLoadingCovers,
+    hasNextCovers,
+    isFetchingNextCovers,
+    fetchNextCovers,
+  ]);
 
-    if (!selectedCategory || !currentCategoryExists) {
-      const firstCategory = categories[0];
+  // Format error messages
+  const categoriesErrorMessage = categoriesErrorObj
+    ? ((categoriesErrorObj as any)?.response?.data?.message || categoriesErrorObj.message || 'Failed to fetch categories')
+    : null;
 
-      setSelectedCategory(firstCategory.category);
-      setSelectedCover(firstCategory.coverUrls?.[0] || '');
-    }
-  }, [categories, selectedCategory]);
+  const coversErrorMessage = coversErrorObj
+    ? ((coversErrorObj as any)?.response?.data?.message || coversErrorObj.message || 'Failed to fetch covers')
+    : null;
 
-  const selectedCategoryData = categories.find(
-    (item) => item.category === selectedCategory
-  );
-
-  const coverUrls = selectedCategoryData?.coverUrls || [];
-
-  const handleCategoryChange = (item: CoverCategory) => {
-    setSelectedCategory(item.category);
-    setSelectedCover(item.coverUrls?.[0] || '');
-  };
-
-  const handleCoverSelect = (url: string) => {
-    setSelectedCover(url);
-  };
-
-  const handleClearSelection = () => {
-    setSelectedCover('');
-  };
-
-  // =========================================================
-  // LOADING
-  // =========================================================
-
-  if (isLoading) {
+  // -------------------------------------------------------------------------
+  // Render: Collapsed "Cover Library" Trigger Card
+  // -------------------------------------------------------------------------
+  if (!hasOpened && !isLoadingCategories) {
     return (
-      <>
-        <style>{coverGalleryStyles}</style>
-
-        <div className="cover-gallery">
-          <div className="cover-status-card">
-            <div className="cover-loading"></div>
-
-            <div className="cover-status-icon">
-              <ImageIcon size={22} />
-            </div>
-
-            <strong>Loading Covers...</strong>
-            <p>Please wait while the covers are being loaded.</p>
+      <div
+        className="red-card"
+        onClick={handleOpenLibrary}
+        style={{
+          padding: '16px 20px',
+          borderRadius: 'var(--radius-md)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+          const arrow = e.currentTarget.querySelector('.expand-arrow') as HTMLElement;
+          if (arrow) {
+            arrow.style.backgroundColor = 'var(--primary-red-subtle)';
+            arrow.style.transform = 'translateX(4px)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border-card)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+          const arrow = e.currentTarget.querySelector('.expand-arrow') as HTMLElement;
+          if (arrow) {
+            arrow.style.backgroundColor = 'var(--bg-subtle)';
+            arrow.style.transform = 'translateX(0)';
+          }
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--primary-red-subtle)',
+              color: 'var(--primary-red)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Layout size={18} />
           </div>
+          <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Cover Library
+          </h2>
         </div>
-      </>
+
+        <div
+          className="expand-arrow"
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--bg-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--primary-red)',
+            transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s ease',
+          }}
+        >
+          <ChevronRight size={20} strokeWidth={2.5} />
+        </div>
+      </div>
     );
   }
 
-  // =========================================================
-  // ERROR
-  // =========================================================
-
-  if (isError) {
+  // -------------------------------------------------------------------------
+  // Render: Initial Loading State
+  // -------------------------------------------------------------------------
+  if (isLoadingCategories) {
     return (
-      <>
-        <style>{coverGalleryStyles}</style>
-
-        <div className="cover-gallery">
-          <div className="cover-status-card">
-
-            <div className="cover-status-icon">
-              <AlertCircle size={27} />
-            </div>
-
-            <strong>
-              Failed to load covers
-            </strong>
-
-            <p>
-              {error instanceof Error
-                ? error.message
-                : 'Something went wrong while loading the cover gallery.'}
-            </p>
-
-            <button
-              type="button"
-              className="cover-refresh-btn"
-              onClick={() => refetch()}
-            >
-              <RefreshCw size={15} />
-              Try Again
-            </button>
-
-          </div>
-        </div>
-      </>
+      <div
+        className="red-card"
+        style={{
+          padding: '48px 24px',
+          textAlign: 'center',
+          borderRadius: 'var(--radius-lg)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Loader2 size={36} className="spin-animation" style={{ color: 'var(--primary-red)', marginBottom: '16px' }} />
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          Loading Cover Library...
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+          Fetching categories from server...
+        </p>
+      </div>
     );
   }
 
-  // =========================================================
-  // EMPTY
-  // =========================================================
-
-  if (categories.length === 0) {
+  // -------------------------------------------------------------------------
+  // Render: Categories Error State
+  // -------------------------------------------------------------------------
+  if (isCategoriesError && categoriesErrorMessage) {
     return (
-      <>
-        <style>{coverGalleryStyles}</style>
-
-        <div className="cover-gallery">
-          <div className="cover-status-card">
-
-            <div className="cover-status-icon">
-              <ImageIcon size={27} />
-            </div>
-
-            <strong>
-              No Covers Available
-            </strong>
-
-            <p>
-              Upload a cover image to create your first cover.
-            </p>
-
-          </div>
-        </div>
-      </>
+      <div
+        className="red-card"
+        style={{
+          padding: '48px 24px',
+          textAlign: 'center',
+          borderRadius: 'var(--radius-lg)',
+        }}
+      >
+        <AlertCircle size={36} style={{ color: 'var(--primary-red)', margin: '0 auto 12px auto' }} />
+        <p style={{ color: 'var(--primary-red)', fontWeight: 600, fontSize: '1rem', marginBottom: '16px' }}>
+          {categoriesErrorMessage}
+        </p>
+        <button
+          className="btn btn-outline"
+          onClick={() => refetchCategories()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <RefreshCw size={15} />
+          Try Again
+        </button>
+      </div>
     );
   }
 
-  // =========================================================
-  // MAIN UI
-  // =========================================================
-
+  // -------------------------------------------------------------------------
+  // Render: Full Gallery UI
+  // -------------------------------------------------------------------------
   return (
-    <>
-      <style>{coverGalleryStyles}</style>
-
-      <div className="cover-gallery">
-
-        {/* =====================================================
-            HEADER
-        ====================================================== */}
-
-        <div className="cover-gallery-header">
-
-          <div className="cover-gallery-title-section">
-
-            <div className="cover-gallery-icon">
-              <ImageIcon size={22} />
-            </div>
-
-            <div>
-              <h2 className="cover-gallery-title">
-                Cover Gallery
-              </h2>
-
-              <p className="cover-gallery-subtitle">
-                Browse uploaded covers by category.
-              </p>
-            </div>
-
+    <div
+      className="red-card"
+      style={{
+        borderRadius: 'var(--radius-lg)',
+        padding: '32px',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '28px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--primary-red-subtle)',
+              color: 'var(--primary-red)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Layout size={18} />
           </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Cover Library
+            </h2>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Browse and select covers by category
+            </p>
+          </div>
+        </div>
 
+        <button
+          type="button"
+          onClick={() => {
+            refetchCovers();
+            refetchCategories();
+          }}
+          disabled={isFetchingCovers}
+          title="Refresh current covers"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 14px',
+            borderRadius: 'var(--radius-md)',
+            border: '1.5px solid var(--border-card)',
+            backgroundColor: '#ffffff',
+            color: 'var(--text-secondary)',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            cursor: isFetchingCovers ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            if (!isFetchingCovers) {
+              e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
+              e.currentTarget.style.color = 'var(--primary-red)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-card)';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+        >
+          <RefreshCw size={14} className={isFetchingCovers ? 'spin-animation' : ''} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {/* Large Widescreen Cover Preview */}
+      <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '28px' }}>
+        <div style={{ textAlign: 'center', width: '100%', maxWidth: '540px' }}>
+          <div
+            style={{
+              width: '100%',
+              height: '190px',
+              borderRadius: 'var(--radius-lg)',
+              border: '3px solid var(--primary-red-soft)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 10px auto',
+              overflow: 'hidden',
+              backgroundColor: 'var(--bg-subtle)',
+              boxShadow: 'var(--shadow-md)',
+              position: 'relative',
+            }}
+          >
+            {selectedCover ? (
+              <img
+                src={selectedCover}
+                alt="Selected Cover"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No Cover Selected</div>
+            )}
+          </div>
+          {selectedCategory && (
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: 'var(--primary-red)',
+                backgroundColor: 'var(--primary-red-subtle)',
+                padding: '3px 10px',
+                borderRadius: '12px',
+                textTransform: 'capitalize',
+                display: 'inline-block',
+              }}
+            >
+              {selectedCategory.category}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Horizontal Categories Bar with Right-side < and > Controls */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px 14px',
+          borderRadius: 'var(--radius-lg)',
+          backgroundColor: 'var(--bg-subtle)',
+          border: '1.5px solid var(--border-card)',
+          marginBottom: '28px',
+          position: 'relative',
+        }}
+      >
+        {/* Categories Horizontal Scroll Container */}
+        <div
+          ref={categoryScrollRef}
+          onScroll={handleCategoryScroll}
+          className="hide-scrollbar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            overflowX: 'auto',
+            scrollBehavior: 'smooth',
+            flex: 1,
+            padding: '2px 0',
+          }}
+        >
+          {categories.map((cat) => {
+            const isSelected = selectedCategory?.id === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => handleSelectCategory(cat)}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '20px',
+                  border: isSelected ? '1.5px solid var(--primary-red)' : '1.5px solid var(--border-card)',
+                  backgroundColor: isSelected ? 'var(--primary-red)' : '#ffffff',
+                  color: isSelected ? '#ffffff' : 'var(--text-primary)',
+                  fontWeight: isSelected ? 700 : 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isSelected ? '0 4px 12px rgba(220, 38, 38, 0.28)' : 'var(--shadow-sm)',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.borderColor = 'var(--border-card)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                <span style={{ textTransform: 'capitalize' }}>{cat.category}</span>
+              </button>
+            );
+          })}
+
+          {/* Loading more categories indicator */}
+          {isFetchingNextCategories && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 12px',
+                color: 'var(--primary-red)',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              <Loader2 size={16} className="spin-animation" />
+              <span>More...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Separator */}
+        <div
+          style={{
+            width: '1px',
+            height: '24px',
+            backgroundColor: 'var(--border-card)',
+            margin: '0 4px',
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Navigation Buttons on Right Side of the Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {/* Previous (<) Button */}
           <button
             type="button"
-            className="cover-refresh-btn"
-            onClick={() => refetch()}
-            disabled={isFetching}
+            onClick={handleScrollCategoryLeft}
+            disabled={!canScrollLeft}
+            title="Previous categories"
+            aria-label="Previous categories"
+            style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
+              border: '1.5px solid var(--border-card)',
+              backgroundColor: '#ffffff',
+              color: canScrollLeft ? 'var(--primary-red)' : 'var(--text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: canScrollLeft ? 'pointer' : 'not-allowed',
+              opacity: canScrollLeft ? 1 : 0.45,
+              transition: 'all 0.2s ease',
+              boxShadow: canScrollLeft ? 'var(--shadow-sm)' : 'none',
+            }}
           >
-            <RefreshCw
-              size={15}
-              className={
-                isFetching
-                  ? 'cover-spin'
-                  : ''
-              }
-            />
-
-            {isFetching
-              ? 'Refreshing...'
-              : 'Refresh'}
+            <ChevronLeft size={18} strokeWidth={2.5} />
           </button>
 
+          {/* Forward / Next (>) Button */}
+          <button
+            type="button"
+            onClick={handleScrollCategoryRight}
+            title="Next categories"
+            aria-label="Next categories"
+            style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
+              border: '1.5px solid var(--border-card)',
+              backgroundColor: '#ffffff',
+              color: 'var(--primary-red)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <ChevronRight size={18} strokeWidth={2.5} />
+          </button>
         </div>
+      </div>
 
-        {/* =====================================================
-            CATEGORY SECTION
-        ====================================================== */}
+      {/* Covers Scroll Hint (when more are available) */}
+      {hasNextCovers && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            marginBottom: '12px',
+          }}
+        >
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+            Scroll down to load more
+          </span>
+        </div>
+      )}
 
-        <div className="cover-category-section">
+      {/* Covers Initial Loading State */}
+      {isLoadingCovers && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '54px 16px',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Loader2 size={32} className="spin-animation" style={{ color: 'var(--primary-red)', marginBottom: '12px' }} />
+          <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem' }}>
+            Loading covers for "{selectedCategory?.category}"...
+          </p>
+        </div>
+      )}
 
-          <div className="cover-category-label">
+      {/* Covers Error State */}
+      {!isLoadingCovers && isCoversError && coversErrorMessage && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '40px 16px',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: '#fee2e2',
+            border: '1.5px solid #fca5a5',
+            marginBottom: '20px',
+          }}
+        >
+          <p style={{ color: '#991b1b', fontWeight: 600, margin: '0 0 12px 0' }}>{coversErrorMessage}</p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => refetchCovers()}
+            style={{ fontSize: '0.85rem', padding: '6px 16px' }}
+          >
+            Retry Category
+          </button>
+        </div>
+      )}
 
-            <Tag size={15} />
+      {/* Covers Empty State */}
+      {!isLoadingCovers && !isCoversError && covers.length === 0 && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '60px 16px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <ImageIcon size={42} style={{ color: 'var(--border-card)', margin: '0 auto 12px auto' }} />
+          <strong style={{ display: 'block', color: 'var(--text-primary)', marginBottom: '4px', fontSize: '1rem' }}>
+            No Covers Available
+          </strong>
+          <p style={{ fontSize: '0.85rem', margin: 0 }}>
+            No covers currently exist under the "{selectedCategory?.category}" category.
+          </p>
+        </div>
+      )}
 
-            <span>
-              Categories
-            </span>
-
-            <span className="cover-category-count">
-              ({categories.length})
-            </span>
-
-          </div>
-
-          <div className="cover-category-list">
-
-            {categories.map((item) => {
-
-              const isActive =
-                selectedCategory === item.category;
-
+      {/* Covers Grid */}
+      {!isLoadingCovers && covers.length > 0 && (
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+              gap: '20px',
+              width: '100%',
+            }}
+          >
+            {covers.map((url, idx) => {
+              const isSelected = url === selectedCover;
               return (
-                <button
-                  key={item.category}
-                  type="button"
-                  onClick={() =>
-                    handleCategoryChange(item)
-                  }
-                  className={`cover-category-btn ${isActive ? 'active' : ''
-                    }`}
+                <div
+                  key={`${url}-${idx}`}
+                  onClick={() => setSelectedCoverUrl(url)}
+                  title="Click to select this cover"
+                  style={{
+                    width: '100%',
+                    aspectRatio: '16 / 9',
+                    borderRadius: 'var(--radius-md)',
+                    border: isSelected ? '3px solid var(--primary-red)' : '2px solid var(--border-card)',
+                    padding: isSelected ? '3px' : '0px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    transform: isSelected ? 'scale(1.03)' : 'none',
+                    boxShadow: isSelected ? '0 4px 14px rgba(220, 38, 38, 0.35)' : 'var(--shadow-sm)',
+                    overflow: 'hidden',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
+                      e.currentTarget.style.transform = 'scale(1.02)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = 'var(--border-card)';
+                      e.currentTarget.style.transform = 'none';
+                    }
+                  }}
                 >
-
-                  <Tag size={13} />
-
-                  <span>
-                    {item.category}
-                  </span>
-
-                  <span className="cover-category-number">
-                    {item.coverUrls?.length || 0}
-                  </span>
-
-                </button>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: 'calc(var(--radius-md) - 3px)',
+                      overflow: 'hidden',
+                      backgroundColor: 'var(--bg-subtle)',
+                    }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Cover ${idx + 1}`}
+                      loading="lazy"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                </div>
               );
             })}
-
-            <ChevronRight
-              size={17}
-              className="cover-category-arrow"
-            />
-
           </div>
 
-        </div>
+          {/* Bottom Sentinel for Infinite Scroll */}
+          <div ref={bottomSentinelRef} style={{ height: '20px', width: '100%' }} />
 
-        {/* =====================================================
-            MAIN CONTENT
-        ====================================================== */}
-
-        <div className="cover-gallery-content">
-
-          {/* ===================================================
-              COVER GALLERY
-          ==================================================== */}
-
-          <div className="cover-gallery-panel">
-
-            <div className="cover-panel-header">
-
-              <h3 className="cover-panel-title">
-                {selectedCategory || 'Covers'}
-              </h3>
-
-              <span className="cover-panel-count">
-                {coverUrls.length}{' '}
-                {coverUrls.length === 1
-                  ? 'cover'
-                  : 'covers'}
-              </span>
-
+          {/* Loading More Covers Spinner */}
+          {isFetchingNextCovers && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '24px 0',
+                color: 'var(--primary-red)',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+              }}
+            >
+              <Loader2 size={18} className="spin-animation" />
+              <span>Loading more covers...</span>
             </div>
+          )}
 
-            {coverUrls.length > 0 ? (
-
-              <div className="cover-grid">
-
-                {coverUrls.map((url, index) => {
-
-                  const isSelected =
-                    selectedCover === url;
-
-                  return (
-                    <button
-                      key={`${url}-${index}`}
-                      type="button"
-                      onClick={() =>
-                        handleCoverSelect(url)
-                      }
-                      className={`cover-item ${isSelected
-                        ? 'selected'
-                        : ''
-                        }`}
-                    >
-
-                      <img
-                        src={url}
-                        alt={`${selectedCategory} cover ${index + 1
-                          }`}
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.style.opacity =
-                            '0.3';
-                        }}
-                      />
-
-                      {isSelected && (
-                        <div className="cover-selected-icon">
-                          <Eye size={14} />
-                        </div>
-                      )}
-
-                      <div className="cover-number">
-                        #{index + 1}
-                      </div>
-
-                    </button>
-                  );
-                })}
-
-              </div>
-
-            ) : (
-
-              <div className="cover-empty-state">
-
-                <ImageIcon size={30} />
-
-                <strong>
-                  No covers in this category
-                </strong>
-
-                <p>
-                  There are no cover images available
-                  for this category.
-                </p>
-
-              </div>
-
-            )}
-
-          </div>
-
-          {/* ===================================================
-              PREVIEW
-          ==================================================== */}
-
-          <div className="cover-gallery-panel">
-
-            <div className="cover-preview-header">
-
-              <h3 className="cover-preview-title">
-
-                <Eye size={17} />
-
-                <span>
-                  Cover Preview
-                </span>
-
-              </h3>
-
-              {selectedCover && (
-                <button
-                  type="button"
-                  onClick={handleClearSelection}
-                  title="Clear selected cover"
-                  aria-label="Clear selected cover"
-                  className="cover-clear-btn"
-                >
-                  <X size={14} />
-                </button>
-              )}
-
+          {/* End of list notification */}
+          {!hasNextCovers && covers.length > COVER_LIMIT && (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '16px 0 0 0',
+                fontSize: '0.78rem',
+                color: 'var(--text-muted)',
+                fontWeight: 500,
+              }}
+            >
+              All covers for this category loaded.
             </div>
+          )}
+        </>
+      )}
 
-            <div className="cover-preview-box">
-
-              {selectedCover ? (
-
-                <img
-                  src={selectedCover}
-                  alt={`${selectedCategory} selected cover`}
-                />
-
-              ) : (
-
-                <div className="cover-preview-empty">
-
-                  <div className="cover-preview-empty-icon">
-                    <ImageIcon size={25} />
-                  </div>
-
-                  <strong>
-                    No Cover Selected
-                  </strong>
-
-                  <p>
-                    Select a cover from the gallery
-                    to preview it here.
-                  </p>
-
-                </div>
-
-              )}
-
-            </div>
-
-            {selectedCover && (
-              <div className="cover-category-badge">
-
-                <Tag size={12} />
-
-                <span>
-                  Category:
-                </span>
-
-                <strong>
-                  {selectedCategory}
-                </strong>
-
-              </div>
-            )}
-
-          </div>
-
-        </div>
-
-      </div>
-    </>
+      {/* Hide Scrollbars CSS */}
+      <style>{`
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+    </div>
   );
 };
-
-
-/* =========================================================
-   ALL CSS IS INSIDE THIS FILE
-========================================================= */
-
-const coverGalleryStyles = `
-  /* =======================================================
-     COVER GALLERY
-  ======================================================== */
-  .cover-gallery {
-  width: 100%;
-  max-width: none;
-  margin: 24px 0 0;
-  padding: 28px;
-  box-sizing: border-box;
-
-  background: #ffffff;
-  border: 1px solid #f7dada;
-  border-radius: 18px;
-
-  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.05);
-}
-  /* 
-     HEADER
-  */
-
-  .cover-gallery-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-
-  .cover-gallery-title-section {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-
-  .cover-gallery-icon {
-    width: 42px;
-    height: 42px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    flex-shrink: 0;
-
-    border-radius: 12px;
-
-    background: #fff1f2;
-    color: #e52525;
-  }
-
-
-  .cover-gallery-title {
-    margin: 0;
-
-    font-size: 1.15rem;
-    font-weight: 800;
-
-    color: #111827;
-  }
-
-
-  .cover-gallery-subtitle {
-    margin: 3px 0 0;
-
-    font-size: 0.82rem;
-
-    color: #6b7280;
-  }
-
-
-  /*
-     REFRESH BUTTON
-*/
-
-  .cover-refresh-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    gap: 7px;
-
-    padding: 9px 15px;
-
-    border: 1px solid #f5bcbc;
-    border-radius: 999px;
-
-    background: #ffffff;
-
-    color: #e52525;
-
-    font-size: 0.82rem;
-    font-weight: 600;
-
-    cursor: pointer;
-
-      transition:
-      background 0.2s ease,
-      border-color 0.2s ease,
-      color 0.2s ease,
-      transform 0.2s ease;
-  }
-
-
-  .cover-refresh-btn:hover {
-    background: #fff1f2;
-    border-color: #e52525;
-    transform: translateY(-1px);
-  }
-
-
-  .cover-refresh-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-  }
-
-
-  /* =======================================================
-     CATEGORY SECTION
-  ======================================================== */
-
-  .cover-category-section {
-    margin-bottom: 24px;
-  }
-
-
-  .cover-category-label {
-    display: flex;
-    align-items: center;
-
-    gap: 7px;
-
-    margin-bottom: 10px;
-
-    color: #111827;
-
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-
-  .cover-category-label svg {
-    color: #e52525;
-  }
-
-
-  .cover-category-count {
-    color: #9ca3af;
-
-    font-size: 0.74rem;
-    font-weight: 500;
-  }
-
-
-  /* 
-     CATEGORY LIST
- */
-
-  .cover-category-list {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    overflow-x: auto;
-    padding: 2px 2px 8px;
-    scrollbar-width: thin;
-  }
-
-  .cover-category-list::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .cover-category-list::-webkit-scrollbar-thumb {
-    background: #f3b6b6;
-    border-radius: 10px;
-  }
-
-
-  /*
-     CATEGORY BUTTON
- */
-
-  .cover-category-btn {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    border-radius: 999px;
-    border: 1px solid #f3d1d1;
-    background: #ffffff;
-    color: #4b5563;
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-     transition:
-      background 0.2s ease,
-      border-color 0.2s ease,
-      color 0.2s ease,
-      box-shadow 0.2s ease,
-      transform 0.2s ease;
-  }
-
-
-  .cover-category-btn:hover {
-    border-color: #e52525;
-    color: #e52525;
-
-    background: #fff7f7;
-
-    transform: translateY(-1px);
-  }
-
-
-  .cover-category-btn.active {
-    background: #e52525;
-
-    border-color: #e52525;
-
-    color: #ffffff;
-
-    box-shadow:
-      0 4px 10px rgba(229, 37, 37, 0.18);
-  }
-
-
-  .cover-category-number {
-    opacity: 0.7;
-
-    font-size: 0.72rem;
-  }
-
-
-  .cover-category-arrow {
-    flex-shrink: 0;
-    color: #9ca3af;
-  }
-
-
-  /* =======================================================
-     MAIN CONTENT
-  ======================================================== */
-
-.cover-gallery-content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: 36px; 
-  row-gap: 20px;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-  box-sizing: border-box;
-  align-items: stretch;
-}
-.cover-gallery-panel {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-
-  /* 
-     PANEL HEADER
-  */
-
-  .cover-panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-
-  .cover-panel-title {
-    margin: 0;
-    color: #111827;
-    font-size: 0.95rem;
-    font-weight: 750;
-  }
-
-
-  .cover-panel-count {
-    color: #9ca3af;
-    font-size: 0.76rem;
-  }
-
-
-
-.cover-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  width: 80%;
-  max-width: 400px;
-}
-
-
-
-.cover-item {
-  position: relative;
-  width: 80%;
-  aspect-ratio: 1 / 1;
-  height: auto;
-  min-width: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 2px solid #f1eeee;
-  border-radius: 14px;
-  background: #fafafa;
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: transform 0.2s, border-color 0.2s,
-              box-shadow 0.2s;
-}
-
-  .cover-item:hover {
-    transform: translateY(-2px);
-    border-color: #f0a0a0;
-    box-shadow:
-    0 6px 15px rgba(0, 0, 0, 0.08);
-  }
-
-
-  .cover-item.selected {
-    border: 2px solid #e52525;
-    box-shadow:
-    0 0 0 3px #fff0f0;
-  }
-
-
-  
-.cover-item img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
-
-
-  /* =======================================================
-     SELECTED ICON
-  ======================================================== */
-
-   .cover-selected-icon {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 26px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: #e52525;
-    color: #ffffff;
-    box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.15);
-  }
-
-
-  /*
-     IMAGE NUMBER
-   */
-  .cover-number {
-    position: absolute;
-    left: 8px;
-    bottom: 8px;
-    padding: 3px 8px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.62);
-    color: #ffffff;
-    font-size: 0.68rem;
-    font-weight: 600;
-  }
-
-  /* 
-     PREVIEW HEADER
-  */
-  .cover-preview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-  .cover-preview-title {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin: 0;
-    color: #111827;
-    font-size: 0.95rem;
-    font-weight: 750;
-  }
-
-  .cover-preview-title svg {
-    color: #e52525;
-  }
-
-  /*
-   CLEAR BUTTON */
-
-  .cover-clear-btn {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #f5caca;
-    border-radius: 50%;
-    background: #fff1f2;
-    color: #e52525;
-    cursor: pointer;
-    transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    border-color 0.2s ease;
-  }
-  .cover-clear-btn:hover {
-    background: #e52525;
-
-    border-color: #e52525;
-
-    color: #ffffff;
-  }
-
-
-  /* 
-     PREVIEW BOX */
-
-    .cover-preview-box {
-    position: relative;
-    min-height: 220px;
-    overflow: hidden;
-    border: 1px solid #f0dcdc;
-    border-radius: 15px;
-    background: #fffafa;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-
-  .cover-preview-box img {
-    width: 100%;
-    height: 100%;
-    min-height: 220px;
-    display: block;
-    object-fit: cover;
-  }
-
-
-  /* 
-     PREVIEW EMPTY STATE
- */
-
-  .cover-preview-empty {
-    width: 100%;
-    min-height: 220px;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    text-align: center;
-  }
-
-  .cover-preview-empty-icon {
-    width: 52px;
-    height: 52px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: #fff1f2;
-    color: #e52525;
-  }
-
-
-  .cover-preview-empty strong {
-    margin-bottom: 4px;
-    color: #111827;
-    font-size: 0.88rem;
-  }
-
-
-  .cover-preview-empty p {
-    max-width: 220px;
-    margin: 0;
-    color: #9ca3af;
-    font-size: 0.76rem;
-    line-height: 1.5;
-  }
-
-
-  /* =======================================================
-     CATEGORY BADGE
-  ======================================================== */
-
-  .cover-category-badge {
-    display: inline-flex;
-    align-items: center;
-
-    gap: 6px;
-
-    margin-top: 10px;
-
-    padding: 6px 11px;
-
-    border: 1px solid #f5cccc;
-
-    border-radius: 999px;
-
-    background: #fff1f2;
-
-    color: #e52525;
-
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-
-  .cover-category-badge strong {
-    font-weight: 700;
-  }
-
-
-  /* =======================================================
-     EMPTY STATE
-  ======================================================== */
-
-  .cover-empty-state {
-    min-height: 180px;
-
-    border: 2px dashed #eadede;
-
-    border-radius: 14px;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    text-align: center;
-
-    color: #9ca3af;
-
-    padding: 20px;
-  }
-
-
-  .cover-empty-state svg {
-    margin-bottom: 8px;
-
-    color: #e52525;
-  }
-
-
-  .cover-empty-state strong {
-    color: #111827;
-
-    font-size: 0.88rem;
-  }
-
-
-  .cover-empty-state p {
-    margin: 5px 0 0;
-
-    font-size: 0.76rem;
-
-    color: #9ca3af;
-  }
-
-
-  /* =======================================================
-     LOADING / ERROR
-  ======================================================== */
-
-  .cover-status-card {
-    min-height: 220px;
-
-    display: flex;
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    gap: 10px;
-
-    text-align: center;
-  }
-
-
-  .cover-status-icon {
-    width: 54px;
-    height: 54px;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    border-radius: 50%;
-
-    background: #fff1f2;
-
-    color: #e52525;
-  }
-
-
-  .cover-status-card strong {
-    color: #111827;
-
-    font-size: 0.9rem;
-  }
-
-
-  .cover-status-card p {
-    max-width: 420px;
-
-    margin: 0;
-
-    color: #6b7280;
-
-    font-size: 0.78rem;
-
-    line-height: 1.5;
-  }
-
-
-  /* =======================================================
-     SPINNER
-  ======================================================== */
-
-  /* Horizontal loading bar */
-.cover-loading {
-  width: 100%;
-  height: 4px;
-  margin: 0 0 20px;
-  overflow: hidden;
-  border-radius: 4px;
-  background: #f3d6d6;
-  position: relative;
-}
-
-.cover-loading::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -35%;
-  width: 35%;
-  height: 100%;
-  border-radius: 4px;
-  background: #e52525;
-  animation: cover-loading-line 1.2s ease-in-out infinite;
-}
-
-@keyframes cover-loading-line {
-  0% {
-    left: -35%;
-    width: 35%;
-  }
-
-  50% {
-    left: 35%;
-    width: 45%;
-  }
-
-  100% {
-    left: 100%;
-    width: 35%;
-  }
-}
-
-
-  
-
-
-  /* =======================================================
-     TABLET
-  ======================================================== */
-
-  @media (max-width: 900px) {
-
-    .cover-gallery-content {
-      grid-template-columns: 1fr;
-    }
-
-    .cover-grid {
-      grid-template-columns:
-        repeat(2, minmax(0, 1fr));
-    }
-
-  }
-
-
-  /* =======================================================
-     MOBILE
-  ======================================================== */
-
-  @media (max-width: 600px) {
-
-    .cover-gallery {
-      padding: 18px;
-      border-radius: 14px;
-    }
-
-    .cover-gallery-header {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-
-    .cover-refresh-btn {
-      width: 100%;
-    }
-
-    .cover-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .cover-gallery-title {
-      font-size: 1.05rem;
-    }
-
-    .cover-gallery-subtitle {
-      font-size: 0.78rem;
-    }
-
-    .cover-category-btn {
-      padding: 7px 13px;
-      font-size: 0.78rem;
-    }
-
-  }
-`;
 
 export default CoverGallery;

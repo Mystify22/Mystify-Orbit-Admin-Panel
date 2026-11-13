@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { DropZone } from '../common/DropZone';
 import CoverGallery from './coverGallery';
 import { ProgressBar } from '../common/ProgressBar';
@@ -28,6 +29,7 @@ const COVER_SPEC: CategorySpec = {
 
 export const CoverUploader: React.FC = () => {
   const { addToast } = useUploads();
+  const queryClient = useQueryClient();
 
   const [category, setCategory] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -85,6 +87,8 @@ export const CoverUploader: React.FC = () => {
 
       setStatus('success');
       setStatusMessage('Cover image uploaded successfully!');
+      queryClient.invalidateQueries({ queryKey: ['cover-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['covers'] });
       addToast(
         'success',
         'Cover Uploaded',
