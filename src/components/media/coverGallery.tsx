@@ -51,9 +51,6 @@ const USER_BASE_URL = import.meta.env.DEV
   : ((import.meta.env.VITE_USER_MS_URL as string | undefined)?.trim() ?? '');
 
 export const CoverGallery: React.FC = () => {
-  // Gallery open/collapsed state
-  const [hasOpened, setHasOpened] = useState<boolean>(false);
-
   // Selected category ID & cover URL state
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedCoverUrl, setSelectedCoverUrl] = useState<string | null>(null);
@@ -96,7 +93,6 @@ export const CoverGallery: React.FC = () => {
     getNextPageParam: (lastPage) => {
       return lastPage.data.hasNext ? lastPage.data.nextCursor : undefined;
     },
-    enabled: hasOpened,
     staleTime: 10 * 60 * 1000, // 10 minutes cache freshness
     gcTime: 30 * 60 * 1000,    // 30 minutes in-memory retention
     refetchOnWindowFocus: false,
@@ -138,7 +134,6 @@ export const CoverGallery: React.FC = () => {
     hasNextPage: hasNextCovers,
     isFetchingNextPage: isFetchingNextCovers,
     isLoading: isLoadingCovers,
-    isFetching: isFetchingCovers,
     isError: isCoversError,
     error: coversErrorObj,
     refetch: refetchCovers,
@@ -155,7 +150,7 @@ export const CoverGallery: React.FC = () => {
     getNextPageParam: (lastPage) => {
       return lastPage.data.hasNext ? lastPage.data.nextCursor : undefined;
     },
-    enabled: hasOpened && activeCategoryId !== undefined,
+    enabled: activeCategoryId !== undefined,
     staleTime: 5 * 60 * 1000,  // 5 minutes cache freshness per category
     gcTime: 30 * 60 * 1000,    // 30 minutes in-memory retention
     refetchOnWindowFocus: false,
@@ -184,10 +179,6 @@ export const CoverGallery: React.FC = () => {
   // -------------------------------------------------------------------------
   // 3. User Actions & Horizontal Category Scroll Controls
   // -------------------------------------------------------------------------
-  const handleOpenLibrary = () => {
-    setHasOpened(true);
-  };
-
   const handleSelectCategory = (cat: CategoryItem) => {
     if (selectedCategoryId === cat.id) return;
     setSelectedCategoryId(cat.id);
@@ -232,7 +223,7 @@ export const CoverGallery: React.FC = () => {
   // 4. Infinite Scroll Observer for Covers
   // -------------------------------------------------------------------------
   useEffect(() => {
-    if (!hasOpened || isLoadingCategories || isLoadingCovers) return;
+    if (isLoadingCategories || isLoadingCovers) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -260,7 +251,6 @@ export const CoverGallery: React.FC = () => {
       observer.disconnect();
     };
   }, [
-    hasOpened,
     isLoadingCategories,
     isLoadingCovers,
     hasNextCovers,
@@ -276,82 +266,6 @@ export const CoverGallery: React.FC = () => {
   const coversErrorMessage = coversErrorObj
     ? ((coversErrorObj as any)?.response?.data?.message || coversErrorObj.message || 'Failed to fetch covers')
     : null;
-
-  // -------------------------------------------------------------------------
-  // Render: Collapsed "Cover Library" Trigger Card
-  // -------------------------------------------------------------------------
-  if (!hasOpened && !isLoadingCategories) {
-    return (
-      <div
-        className="red-card"
-        onClick={handleOpenLibrary}
-        style={{
-          padding: '16px 20px',
-          borderRadius: 'var(--radius-md)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
-          e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-          const arrow = e.currentTarget.querySelector('.expand-arrow') as HTMLElement;
-          if (arrow) {
-            arrow.style.backgroundColor = 'var(--primary-red-subtle)';
-            arrow.style.transform = 'translateX(4px)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = 'var(--border-card)';
-          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-          const arrow = e.currentTarget.querySelector('.expand-arrow') as HTMLElement;
-          if (arrow) {
-            arrow.style.backgroundColor = 'var(--bg-subtle)';
-            arrow.style.transform = 'translateX(0)';
-          }
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--primary-red-subtle)',
-              color: 'var(--primary-red)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Layout size={18} />
-          </div>
-          <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            Cover Library
-          </h2>
-        </div>
-
-        <div
-          className="expand-arrow"
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--bg-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--primary-red)',
-            transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s ease',
-          }}
-        >
-          <ChevronRight size={20} strokeWidth={2.5} />
-        </div>
-      </div>
-    );
-  }
 
   // -------------------------------------------------------------------------
   // Render: Initial Loading State
@@ -428,72 +342,33 @@ export const CoverGallery: React.FC = () => {
         style={{
           width: '100%',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          gap: '10px',
           marginBottom: '28px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--primary-red-subtle)',
-              color: 'var(--primary-red)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Layout size={18} />
-          </div>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Cover Library
-            </h2>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Browse and select covers by category
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            refetchCovers();
-            refetchCategories();
-          }}
-          disabled={isFetchingCovers}
-          title="Refresh current covers"
+        <div
           style={{
-            display: 'inline-flex',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--primary-red-subtle)',
+            color: 'var(--primary-red)',
+            display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            padding: '7px 14px',
-            borderRadius: 'var(--radius-md)',
-            border: '1.5px solid var(--border-card)',
-            backgroundColor: '#ffffff',
-            color: 'var(--text-secondary)',
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            cursor: isFetchingCovers ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            if (!isFetchingCovers) {
-              e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
-              e.currentTarget.style.color = 'var(--primary-red)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-card)';
-            e.currentTarget.style.color = 'var(--text-secondary)';
+            justifyContent: 'center',
           }}
         >
-          <RefreshCw size={14} className={isFetchingCovers ? 'spin-animation' : ''} />
-          <span>Refresh</span>
-        </button>
+          <Layout size={18} />
+        </div>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+            Cover Library
+          </h2>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            Browse and select covers by category
+          </p>
+        </div>
       </div>
 
       {/* Large Widescreen Cover Preview */}

@@ -40,21 +40,19 @@ export const CoverUploader: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!selectedFile) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreviewUrl(objectUrl);
-
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
     };
-  }, [selectedFile]);
+  }, [previewUrl]);
 
   const handleFileSelect = (file: File) => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
     setStatus('idle');
     setProgress(0);
     setStatusMessage('Ready to upload');
@@ -103,6 +101,9 @@ export const CoverUploader: React.FC = () => {
   };
 
   const handleReset = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setSelectedFile(null);
     setPreviewUrl(null);
     setStatus('idle');
@@ -118,9 +119,10 @@ export const CoverUploader: React.FC = () => {
     status === 'success';
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
-      {/* Upload Box */}
-      <div className="red-card" style={{ padding: '28px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '24px' }}>
+        {/* Upload Box */}
+        <div className="red-card" style={{ padding: '28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <div
             style={{
@@ -334,19 +336,22 @@ export const CoverUploader: React.FC = () => {
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
+              alignItems: 'center',
               justifyContent: 'center',
+              padding: '16px 0',
             }}
           >
             <div
               style={{
                 position: 'relative',
                 width: '100%',
-                maxHeight: '340px',
+                aspectRatio: '16 / 9',
+                maxHeight: '260px',
                 borderRadius: 'var(--radius-lg)',
                 overflow: 'hidden',
                 border: '3px solid var(--primary-red)',
-                boxShadow: 'var(--shadow-lg)',
-                backgroundColor: '#111827',
+                boxShadow: 'var(--shadow-red-glow)',
+                backgroundColor: 'var(--bg-subtle)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -355,7 +360,7 @@ export const CoverUploader: React.FC = () => {
               <img
                 src={previewUrl}
                 alt="Cover Preview"
-                style={{ width: '100%', height: 'auto', maxHeight: '340px', objectFit: 'cover' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
 
@@ -421,6 +426,8 @@ export const CoverUploader: React.FC = () => {
         )}
       </div>
 
+      </div>
+
       {/* Irreversible Upload Confirmation Modal */}
       <ConfirmationModal
         isOpen={showConfirmModal}
@@ -430,16 +437,8 @@ export const CoverUploader: React.FC = () => {
         onCancel={() => setShowConfirmModal(false)}
         isLoading={status === 'uploading'}
       />
-            <div
-  style={{
-    gridColumn: '1 / -1',
-    width: '100%',
-    minWidth: 0,
-  }}
->
-  <CoverGallery />
-</div>
 
+      <CoverGallery />
     </div>
 
   );

@@ -40,21 +40,19 @@ export const AvatarUploader: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!selectedFile) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreviewUrl(objectUrl);
-
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
     };
-  }, [selectedFile]);
+  }, [previewUrl]);
 
   const handleFileSelect = (file: File) => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
     setStatus('idle');
     setProgress(0);
     setStatusMessage('Ready to upload');
@@ -103,6 +101,9 @@ export const AvatarUploader: React.FC = () => {
   };
 
   const handleReset = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setSelectedFile(null);
     setPreviewUrl(null);
     setStatus('idle');
@@ -425,6 +426,8 @@ export const AvatarUploader: React.FC = () => {
         )}
       </div>
 
+      </div>
+
       {/* Irreversible Upload Confirmation Modal */}
       <ConfirmationModal
         isOpen={showConfirmModal}
@@ -434,7 +437,6 @@ export const AvatarUploader: React.FC = () => {
         onCancel={() => setShowConfirmModal(false)}
         isLoading={status === 'uploading'}
       />
-      </div>
 
       <AvatarGallery />
     </div>
