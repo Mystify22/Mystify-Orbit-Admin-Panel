@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Image as ImageIcon,
   ChevronRight,
@@ -51,28 +52,13 @@ export const AvatarGallery: React.FC = () => {
   // Gallery open/collapsed state
   const [hasOpened, setHasOpened] = useState<boolean>(false);
 
-  // Categories state
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<CategoryItem | null>(null);
-  const [categoriesNextCursor, setCategoriesNextCursor] = useState<number | null>(null);
-  const [categoriesHasNext, setCategoriesHasNext] = useState<boolean>(false);
-  const [loadingCategories, setLoadingCategories] = useState<boolean>(false);
-  const [loadingMoreCategories, setLoadingMoreCategories] = useState<boolean>(false);
-  const [categoriesError, setCategoriesError] = useState<string | null>(null);
-
-  // Avatars state
-  const [avatars, setAvatars] = useState<string[]>([]);
-  const [selectedAvatar, setSelectedAvatar] = useState<string>('');
-  const [avatarsNextCursor, setAvatarsNextCursor] = useState<number | null>(null);
-  const [avatarsHasNext, setAvatarsHasNext] = useState<boolean>(false);
-  const [loadingAvatars, setLoadingAvatars] = useState<boolean>(false);
-  const [loadingMoreAvatars, setLoadingMoreAvatars] = useState<boolean>(false);
-  const [avatarsError, setAvatarsError] = useState<string | null>(null);
+  // Selected category ID & avatar URL state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
 
   // Refs
   const categoryScrollRef = useRef<HTMLDivElement | null>(null);
   const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
-  const activeCategoryReqRef = useRef<number | null>(null);
 
   // Track scroll position for < button enable/disable
   const [canScrollLeft, setCanScrollLeft] = useState<boolean>(false);
@@ -84,136 +70,126 @@ export const AvatarGallery: React.FC = () => {
   }, []);
 
   // -------------------------------------------------------------------------
-  // 1. Fetch Categories (Initial & Pagination)
+  // 1. TanStack Query: Categories Cache & Infinite Cursor Pagination
   // -------------------------------------------------------------------------
-  const fetchCategories = async (isInitial: boolean = true) => {
-    try {
-      if (isInitial) {
-        setLoadingCategories(true);
-        setCategoriesError(null);
-      } else {
-        setLoadingMoreCategories(true);
-      }
+  const {
+    data: categoriesData,
+    fetchNextPage: fetchNextCategories,
+    hasNextPage: hasNextCategories,
+    isFetchingNextPage: isFetchingNextCategories,
+    isLoading: isLoadingCategories,
+    isError: isCategoriesError,
+    error: categoriesErrorObj,
+    refetch: refetchCategories,
+  } = useInfiniteQuery<CategoriesApiResponse, Error>({
+    queryKey: ['avatar-categories'],
+    queryFn: async ({ pageParam }) => {
+      const cursorParam = pageParam !== null ? `&cursorId=${pageParam}` : '';
+      const response = await axios.get<CategoriesApiResponse>(
+        `${USER_BASE_URL}/v1/users/avatar/categories?limit=${CATEGORY_LIMIT}${cursorParam}`
+      );
+      return response.data;
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => {
+      return lastPage.data.hasNext ? lastPage.data.nextCursor : undefined;
+    },
+    enabled: hasOpened,
+    staleTime: 10 * 60 * 1000, // 10 minutes cache freshness
+    gcTime: 30 * 60 * 1000,    // 30 minutes in-memory retention
+    refetchOnWindowFocus: false,
+  });
 
-      const cursorParam = !isInitial && categoriesNextCursor !== null
-        ? `&cursorId=${categoriesNextCursor}`
-        : '';
-      const url = `${USER_BASE_URL}/v1/users/avatar/categories?limit=${CATEGORY_LIMIT}${cursorParam}`;
-
-      const response = await axios.get<CategoriesApiResponse>(url);
-      const resData = response.data.data;
-      const fetchedItems = resData.items || [];
-
-      if (isInitial) {
-        setCategories(fetchedItems);
-        setCategoriesNextCursor(resData.nextCursor);
-        setCategoriesHasNext(resData.hasNext);
-
-        // Automatically select the first category if available
-        if (fetchedItems.length > 0) {
-          const first = fetchedItems[0];
-          setSelectedCategory(first);
-          fetchAvatarsForCategory(first.id, true);
-        }
-      } else {
-        setCategories((prev) => {
-          // Deduplicate by ID
-          const existingIds = new Set(prev.map((c) => c.id));
-          const newUnique = fetchedItems.filter((c) => !existingIds.has(c.id));
-          return [...prev, ...newUnique];
-        });
-        setCategoriesNextCursor(resData.nextCursor);
-        setCategoriesHasNext(resData.hasNext);
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Failed to fetch categories';
-      if (isInitial) {
-        setCategoriesError(msg);
-      }
-    } finally {
-      if (isInitial) {
-        setLoadingCategories(false);
-      } else {
-        setLoadingMoreCategories(false);
-      }
-      setTimeout(updateScrollButtons, 100);
-    }
-  };
-
-  // -------------------------------------------------------------------------
-  // 2. Fetch Avatars for a specific category (Initial & Pagination)
-  // -------------------------------------------------------------------------
-  const fetchAvatarsForCategory = async (
-    categoryId: number,
-    isInitial: boolean = true,
-    cursor: number | null = null
-  ) => {
-    try {
-      activeCategoryReqRef.current = categoryId;
-
-      if (isInitial) {
-        setLoadingAvatars(true);
-        setAvatarsError(null);
-        setAvatars([]);
-      } else {
-        setLoadingMoreAvatars(true);
-      }
-
-      const cursorParam = !isInitial && cursor !== null ? `&cursorId=${cursor}` : '';
-      const url = `${USER_BASE_URL}/v1/users/get-avatar?categoryId=${categoryId}&limit=${AVATAR_LIMIT}${cursorParam}`;
-
-      const response = await axios.get<AvatarsApiResponse>(url);
-
-      // Guard against race conditions if user switched categories
-      if (activeCategoryReqRef.current !== categoryId) return;
-
-      const resData = response.data.data;
-      const fetchedUrls = resData.items || [];
-
-      if (isInitial) {
-        setAvatars(fetchedUrls);
-        setAvatarsNextCursor(resData.nextCursor);
-        setAvatarsHasNext(resData.hasNext);
-
-        if (fetchedUrls.length > 0) {
-          setSelectedAvatar(fetchedUrls[0]);
-        } else {
-          setSelectedAvatar('');
-        }
-      } else {
-        setAvatars((prev) => [...prev, ...fetchedUrls]);
-        setAvatarsNextCursor(resData.nextCursor);
-        setAvatarsHasNext(resData.hasNext);
-      }
-    } catch (err: any) {
-      if (activeCategoryReqRef.current !== categoryId) return;
-      const msg = err.response?.data?.message || err.message || 'Failed to fetch avatars';
-      setAvatarsError(msg);
-    } finally {
-      if (activeCategoryReqRef.current === categoryId) {
-        if (isInitial) {
-          setLoadingAvatars(false);
-        } else {
-          setLoadingMoreAvatars(false);
+  // Flatten and deduplicate categories across all loaded pages
+  const categories: CategoryItem[] = useMemo(() => {
+    if (!categoriesData?.pages) return [];
+    const map = new Map<number, CategoryItem>();
+    for (const page of categoriesData.pages) {
+      if (page.data?.items) {
+        for (const item of page.data.items) {
+          if (!map.has(item.id)) {
+            map.set(item.id, item);
+          }
         }
       }
     }
-  };
+    return Array.from(map.values());
+  }, [categoriesData]);
+
+  // Derived active category: explicit selection or defaults to the first category
+  const selectedCategory: CategoryItem | null = useMemo(() => {
+    if (selectedCategoryId !== null) {
+      const found = categories.find((c) => c.id === selectedCategoryId);
+      if (found) return found;
+    }
+    return categories[0] || null;
+  }, [categories, selectedCategoryId]);
+
+  const activeCategoryId = selectedCategory?.id;
 
   // -------------------------------------------------------------------------
-  // 3. User actions
+  // 2. TanStack Query: Avatars Cache by Category with Cursor Pagination
+  // -------------------------------------------------------------------------
+  const {
+    data: avatarsData,
+    fetchNextPage: fetchNextAvatars,
+    hasNextPage: hasNextAvatars,
+    isFetchingNextPage: isFetchingNextAvatars,
+    isLoading: isLoadingAvatars,
+    isFetching: isFetchingAvatars,
+    isError: isAvatarsError,
+    error: avatarsErrorObj,
+    refetch: refetchAvatars,
+  } = useInfiniteQuery<AvatarsApiResponse, Error>({
+    queryKey: ['avatars', activeCategoryId],
+    queryFn: async ({ pageParam }) => {
+      const cursorParam = pageParam !== null ? `&cursorId=${pageParam}` : '';
+      const response = await axios.get<AvatarsApiResponse>(
+        `${USER_BASE_URL}/v1/users/get-avatar?categoryId=${activeCategoryId}&limit=${AVATAR_LIMIT}${cursorParam}`
+      );
+      return response.data;
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => {
+      return lastPage.data.hasNext ? lastPage.data.nextCursor : undefined;
+    },
+    enabled: hasOpened && activeCategoryId !== undefined,
+    staleTime: 5 * 60 * 1000,  // 5 minutes cache freshness per category
+    gcTime: 30 * 60 * 1000,    // 30 minutes in-memory retention
+    refetchOnWindowFocus: false,
+  });
+
+  // Flatten avatar image URLs across all loaded pages for the active category
+  const avatars: string[] = useMemo(() => {
+    if (!avatarsData?.pages) return [];
+    const list: string[] = [];
+    for (const page of avatarsData.pages) {
+      if (page.data?.items) {
+        list.push(...page.data.items);
+      }
+    }
+    return list;
+  }, [avatarsData]);
+
+  // Derived active avatar: explicit selection or defaults to first in category
+  const selectedAvatar: string = useMemo(() => {
+    if (selectedAvatarUrl && avatars.includes(selectedAvatarUrl)) {
+      return selectedAvatarUrl;
+    }
+    return avatars[0] || '';
+  }, [avatars, selectedAvatarUrl]);
+
+  // -------------------------------------------------------------------------
+  // 3. User Actions & Horizontal Category Scroll Controls
   // -------------------------------------------------------------------------
   const handleOpenLibrary = () => {
     setHasOpened(true);
-    if (categories.length === 0) {
-      fetchCategories(true);
-    }
   };
 
   const handleSelectCategory = (cat: CategoryItem) => {
-    if (selectedCategory?.id === cat.id) return;
-    setSelectedCategory(cat);
-    fetchAvatarsForCategory(cat.id, true);
+    if (selectedCategoryId === cat.id) return;
+    setSelectedCategoryId(cat.id);
+    setSelectedAvatarUrl(null); // Reset selection to first avatar in the new category
   };
 
   const handleScrollCategoryLeft = () => {
@@ -229,11 +205,10 @@ export const AvatarGallery: React.FC = () => {
       const { scrollLeft, clientWidth, scrollWidth } = categoryScrollRef.current;
       if (
         scrollLeft + clientWidth >= scrollWidth - 80 &&
-        categoriesHasNext &&
-        !loadingMoreCategories &&
-        categoriesNextCursor !== null
+        hasNextCategories &&
+        !isFetchingNextCategories
       ) {
-        fetchCategories(false);
+        fetchNextCategories();
       }
     }
   };
@@ -244,31 +219,28 @@ export const AvatarGallery: React.FC = () => {
     const { scrollLeft, clientWidth, scrollWidth } = categoryScrollRef.current;
     if (
       scrollLeft + clientWidth >= scrollWidth - 50 &&
-      categoriesHasNext &&
-      !loadingMoreCategories &&
-      categoriesNextCursor !== null
+      hasNextCategories &&
+      !isFetchingNextCategories
     ) {
-      fetchCategories(false);
+      fetchNextCategories();
     }
   };
 
   // -------------------------------------------------------------------------
-  // 4. Infinite scroll observer for Avatars
+  // 4. Infinite Scroll Observer for Avatars
   // -------------------------------------------------------------------------
   useEffect(() => {
-    if (!hasOpened || loadingCategories || loadingAvatars) return;
+    if (!hasOpened || isLoadingCategories || isLoadingAvatars) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
         if (
           entry.isIntersecting &&
-          avatarsHasNext &&
-          !loadingMoreAvatars &&
-          avatarsNextCursor !== null &&
-          selectedCategory
+          hasNextAvatars &&
+          !isFetchingNextAvatars
         ) {
-          fetchAvatarsForCategory(selectedCategory.id, false, avatarsNextCursor);
+          fetchNextAvatars();
         }
       },
       {
@@ -287,18 +259,26 @@ export const AvatarGallery: React.FC = () => {
     };
   }, [
     hasOpened,
-    loadingCategories,
-    loadingAvatars,
-    avatarsHasNext,
-    loadingMoreAvatars,
-    avatarsNextCursor,
-    selectedCategory,
+    isLoadingCategories,
+    isLoadingAvatars,
+    hasNextAvatars,
+    isFetchingNextAvatars,
+    fetchNextAvatars,
   ]);
+
+  // Format error messages
+  const categoriesErrorMessage = categoriesErrorObj
+    ? ((categoriesErrorObj as any)?.response?.data?.message || categoriesErrorObj.message || 'Failed to fetch categories')
+    : null;
+
+  const avatarsErrorMessage = avatarsErrorObj
+    ? ((avatarsErrorObj as any)?.response?.data?.message || avatarsErrorObj.message || 'Failed to fetch avatars')
+    : null;
 
   // -------------------------------------------------------------------------
   // Render: Collapsed "Avatar Library" Trigger Card
   // -------------------------------------------------------------------------
-  if (!hasOpened && !loadingCategories) {
+  if (!hasOpened && !isLoadingCategories) {
     return (
       <div
         className="red-card"
@@ -374,7 +354,7 @@ export const AvatarGallery: React.FC = () => {
   // -------------------------------------------------------------------------
   // Render: Initial Loading State
   // -------------------------------------------------------------------------
-  if (loadingCategories) {
+  if (isLoadingCategories) {
     return (
       <div
         className="red-card"
@@ -402,7 +382,7 @@ export const AvatarGallery: React.FC = () => {
   // -------------------------------------------------------------------------
   // Render: Categories Error State
   // -------------------------------------------------------------------------
-  if (categoriesError) {
+  if (isCategoriesError && categoriesErrorMessage) {
     return (
       <div
         className="red-card"
@@ -414,11 +394,11 @@ export const AvatarGallery: React.FC = () => {
       >
         <AlertCircle size={36} style={{ color: 'var(--primary-red)', margin: '0 auto 12px auto' }} />
         <p style={{ color: 'var(--primary-red)', fontWeight: 600, fontSize: '1rem', marginBottom: '16px' }}>
-          {categoriesError}
+          {categoriesErrorMessage}
         </p>
         <button
           className="btn btn-outline"
-          onClick={() => fetchCategories(true)}
+          onClick={() => refetchCategories()}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
           <RefreshCw size={15} />
@@ -479,13 +459,10 @@ export const AvatarGallery: React.FC = () => {
         <button
           type="button"
           onClick={() => {
-            if (selectedCategory) {
-              fetchAvatarsForCategory(selectedCategory.id, true);
-            } else {
-              fetchCategories(true);
-            }
+            refetchAvatars();
+            refetchCategories();
           }}
-          disabled={loadingAvatars}
+          disabled={isFetchingAvatars}
           title="Refresh current avatars"
           style={{
             display: 'inline-flex',
@@ -498,11 +475,11 @@ export const AvatarGallery: React.FC = () => {
             color: 'var(--text-secondary)',
             fontSize: '0.8rem',
             fontWeight: 600,
-            cursor: loadingAvatars ? 'not-allowed' : 'pointer',
+            cursor: isFetchingAvatars ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s ease',
           }}
           onMouseEnter={(e) => {
-            if (!loadingAvatars) {
+            if (!isFetchingAvatars) {
               e.currentTarget.style.borderColor = 'var(--primary-red-soft)';
               e.currentTarget.style.color = 'var(--primary-red)';
             }
@@ -512,7 +489,7 @@ export const AvatarGallery: React.FC = () => {
             e.currentTarget.style.color = 'var(--text-secondary)';
           }}
         >
-          <RefreshCw size={14} className={loadingAvatars ? 'spin-animation' : ''} />
+          <RefreshCw size={14} className={isFetchingAvatars ? 'spin-animation' : ''} />
           <span>Refresh</span>
         </button>
       </div>
@@ -636,7 +613,7 @@ export const AvatarGallery: React.FC = () => {
           })}
 
           {/* Loading more categories indicator */}
-          {loadingMoreCategories && (
+          {isFetchingNextCategories && (
             <div
               style={{
                 display: 'inline-flex',
@@ -721,7 +698,7 @@ export const AvatarGallery: React.FC = () => {
       </div>
 
       {/* Avatars Scroll Hint (when more are available) */}
-      {avatarsHasNext && (
+      {hasNextAvatars && (
         <div
           style={{
             display: 'flex',
@@ -736,8 +713,8 @@ export const AvatarGallery: React.FC = () => {
         </div>
       )}
 
-      {/* Avatars Loading State */}
-      {loadingAvatars && (
+      {/* Avatars Initial Loading State */}
+      {isLoadingAvatars && (
         <div
           style={{
             textAlign: 'center',
@@ -757,7 +734,7 @@ export const AvatarGallery: React.FC = () => {
       )}
 
       {/* Avatars Error State */}
-      {!loadingAvatars && avatarsError && (
+      {!isLoadingAvatars && isAvatarsError && avatarsErrorMessage && (
         <div
           style={{
             textAlign: 'center',
@@ -768,11 +745,11 @@ export const AvatarGallery: React.FC = () => {
             marginBottom: '20px',
           }}
         >
-          <p style={{ color: '#991b1b', fontWeight: 600, margin: '0 0 12px 0' }}>{avatarsError}</p>
+          <p style={{ color: '#991b1b', fontWeight: 600, margin: '0 0 12px 0' }}>{avatarsErrorMessage}</p>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => selectedCategory && fetchAvatarsForCategory(selectedCategory.id, true)}
+            onClick={() => refetchAvatars()}
             style={{ fontSize: '0.85rem', padding: '6px 16px' }}
           >
             Retry Category
@@ -781,7 +758,7 @@ export const AvatarGallery: React.FC = () => {
       )}
 
       {/* Avatars Empty State */}
-      {!loadingAvatars && !avatarsError && avatars.length === 0 && (
+      {!isLoadingAvatars && !isAvatarsError && avatars.length === 0 && (
         <div
           style={{
             textAlign: 'center',
@@ -800,7 +777,7 @@ export const AvatarGallery: React.FC = () => {
       )}
 
       {/* Avatars Grid */}
-      {!loadingAvatars && avatars.length > 0 && (
+      {!isLoadingAvatars && avatars.length > 0 && (
         <>
           <div
             style={{
@@ -815,7 +792,7 @@ export const AvatarGallery: React.FC = () => {
               return (
                 <div
                   key={`${url}-${idx}`}
-                  onClick={() => setSelectedAvatar(url)}
+                  onClick={() => setSelectedAvatarUrl(url)}
                   title="Click to select this avatar"
                   style={{
                     width: '100%',
@@ -872,7 +849,7 @@ export const AvatarGallery: React.FC = () => {
           <div ref={bottomSentinelRef} style={{ height: '20px', width: '100%' }} />
 
           {/* Loading More Avatars Spinner */}
-          {loadingMoreAvatars && (
+          {isFetchingNextAvatars && (
             <div
               style={{
                 display: 'flex',
@@ -891,7 +868,7 @@ export const AvatarGallery: React.FC = () => {
           )}
 
           {/* End of list notification */}
-          {!avatarsHasNext && avatars.length > AVATAR_LIMIT && (
+          {!hasNextAvatars && avatars.length > AVATAR_LIMIT && (
             <div
               style={{
                 textAlign: 'center',

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { DropZone } from '../common/DropZone';
 import { AvatarGallery } from './AvatarGallery';
 import { ProgressBar } from '../common/ProgressBar';
@@ -28,6 +29,7 @@ const AVATAR_SPEC: CategorySpec = {
 
 export const AvatarUploader: React.FC = () => {
   const { addToast } = useUploads();
+  const queryClient = useQueryClient();
 
   const [category, setCategory] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -85,6 +87,8 @@ export const AvatarUploader: React.FC = () => {
 
       setStatus('success');
       setStatusMessage('Avatar uploaded successfully!');
+      queryClient.invalidateQueries({ queryKey: ['avatar-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['avatars'] });
       addToast(
         'success',
         'Avatar Uploaded',
