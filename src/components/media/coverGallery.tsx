@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { getOptimizedImageUrl } from '../../utils/imageOptimizer';
 import {
   Image as ImageIcon,
   ChevronRight,
@@ -516,8 +517,9 @@ export const CoverGallery: React.FC = () => {
           >
             {selectedCover ? (
               <img
-                src={selectedCover}
+                src={getOptimizedImageUrl(selectedCover, 1000)}
                 alt="Selected Cover"
+                decoding="async"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
@@ -834,9 +836,10 @@ export const CoverGallery: React.FC = () => {
                     }}
                   >
                     <img
-                      src={url}
+                      src={getOptimizedImageUrl(url, 600)}
                       alt={`Cover ${idx + 1}`}
                       loading="lazy"
+                      decoding="async"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   </div>
